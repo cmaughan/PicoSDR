@@ -17,7 +17,7 @@ namespace MPico
 {
 
 // Utility function to blind the light for debugging
-int m_pico_led_init()
+int m_led_init()
 {
 #ifndef PICO_W
     // A device like Pico that uses a GPIO for the LED will define PICO_DEFAULT_LED_PIN
@@ -32,8 +32,13 @@ int m_pico_led_init()
 }
 
 // Turn the led on or off
-void pico_set_led(bool led_on)
+void m_set_led(bool led_on)
 {
+    if (!init)
+    {
+        m_led_init();
+        init = true;
+    }
 #ifndef PICO_W
     // Just set the GPIO on or off
     gpio_put(PICO_DEFAULT_LED_PIN, led_on);
@@ -45,15 +50,11 @@ void pico_set_led(bool led_on)
 
 void m_blink(uint32_t count)
 {
-    if (!init)
-    {
-        m_pico_led_init();
-        init = true;
-    }
-    pico_set_led(true);
+    m_set_led(true);
     sleep_ms(count);
-    pico_set_led(false);
+    m_set_led(false);
     sleep_ms(count);
 }
+
 
 } // namespace MPico
