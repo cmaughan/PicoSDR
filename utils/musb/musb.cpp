@@ -9,9 +9,6 @@
 
 #include <mled/mled.h>
 
-namespace MPico 
-{
-
 //--------------------------------------------------------------------+
 // MACRO CONSTANT TYPEDEF PROTYPES
 //--------------------------------------------------------------------+
@@ -43,10 +40,6 @@ audio20_control_range_4_n_t(1) sampleFreqRng;                                   
 
 // Audio test data, 4 channels muxed together, buffer[0] for CH0, buffer[1] for CH1, buffer[2] for CH2, buffer[3] for CH3
 uint16_t i2s_dummy_buffer[CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_TX * CFG_TUD_AUDIO_FUNC_1_SAMPLE_RATE / 1000];
-
-void led_blinking_task(void);
-void audio_task(void);
-
 
 //--------------------------------------------------------------------+
 // Device callbacks
@@ -251,7 +244,7 @@ bool tud_audio_get_req_entity_cb(uint8_t rhport, tusb_control_request_t const *p
         ret.bmChannelConfig = (audio20_channel_config_t) 0;
         ret.iChannelNames = 0;
 
-        TU_LOG2("    Get terminal connector\r\n");
+        TU_LOG1("    Get terminal connector\r\n");
 
         return tud_audio_buffer_and_schedule_control_xfer(rhport, p_request, (void *) &ret, sizeof(ret));
       } break;
@@ -312,18 +305,22 @@ bool tud_audio_get_req_entity_cb(uint8_t rhport, tusb_control_request_t const *p
         // channelNum is always zero in this case
         switch (p_request->bRequest) {
           case AUDIO20_CS_REQ_CUR:
-            TU_LOG2("    Get Sample Freq.\r\n");
+            TU_LOG1("    Get Sample Freq.\r\n");
             // Buffered control transfer is needed for IN flow control to work
             return tud_audio_buffer_and_schedule_control_xfer(rhport, p_request, &sampFreq, sizeof(sampFreq));
 
           case AUDIO20_CS_REQ_RANGE:
-            TU_LOG2("    Get Sample Freq. range\r\n");
+            TU_LOG1("    Get Sample Freq. range\r\n");
             return tud_control_xfer(rhport, p_request, &sampleFreqRng, sizeof(sampleFreqRng));
 
             // Unknown/Unsupported control
           default:
+          {
+            TU_LOG1("    Unknown/Unsupported control\r\n");
             TU_BREAKPOINT();
             return false;
+          }
+          break;
         }
         break;
 
@@ -334,14 +331,18 @@ bool tud_audio_get_req_entity_cb(uint8_t rhport, tusb_control_request_t const *p
 
       // Unknown/Unsupported control
       default:
+        TU_LOG1("    Unknown/Unsupported control\r\n");
         TU_BREAKPOINT();
         return false;
     }
   }
 
-  TU_LOG2("  Unsupported entity: %d\r\n", entityID);
+  TU_LOG1("  Unsupported entity: %d\r\n", entityID);
   return false;// Yet not implemented
 }
+
+namespace MPico
+{
 
 //--------------------------------------------------------------------+
 // BLINKING TASK
