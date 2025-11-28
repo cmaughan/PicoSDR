@@ -1,0 +1,3 @@
+[submodule "target/external/tinyusb"]
+	path = target/external/tinyusb
+	url = https://github.com/hathach/tinyusb.git
