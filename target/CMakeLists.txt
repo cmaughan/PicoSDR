@@ -77,6 +77,8 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
     DISABLE_PROFILER_UI
     )
 
+    #Hide the annoying GCC9.1 parameter change stuff
+target_compile_options(${PROJECT_NAME} PUBLIC -Wno-psabi)
 # add url via pico_set_program_url
 # pico_enable_stdio_usb(${PROJECT_NAME} 1)
 # pico_enable_stdio_uart(${PROJECT_NAME} 0)

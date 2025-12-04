@@ -14,6 +14,7 @@ set(VCPKG_TARGET_TRIPLET x64-windows-static-md)
 endif()
 
 set(EXTERNAL_ROOT ${CMAKE_CURRENT_LIST_DIR}/shared/external)
+set(PICO_SDR_ROOT ${CMAKE_CURRENT_LIST_DIR})
 
 set(CMAKE_TOOLCHAIN_FILE ${CMAKE_CURRENT_LIST_DIR}/shared/external/vcpkg/scripts/buildsystems/vcpkg.cmake CACHE STRING "Vcpkg toolchain file")
 

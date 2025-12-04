@@ -5,6 +5,10 @@
 
 #include <pico/stdlib.h>
 
+#include <pico_zest/time/pico_profiler.h>
+
+using namespace Zest;
+
 namespace MPico
 {
 
@@ -20,6 +24,7 @@ const uint8_t note_sequence[] = {
 
 void midi_task(void)
 {
+    PROFILE_SCOPE(midi_task);
     static uint32_t start_ms = 0;
 
     uint8_t const cable_num = 0; // MIDI jack associated with USB endpoint

@@ -36,6 +36,8 @@ target_include_directories(${APP_NAME}
     PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
     ${CMAKE_BINARY_DIR}
+    ${PICO_SDR_ROOT}
+    ${PICO_SDR_ROOT}/target/external/pico_zest/include
     )
 
 target_link_libraries (${APP_NAME}

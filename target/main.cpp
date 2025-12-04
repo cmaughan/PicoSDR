@@ -5,6 +5,7 @@
 #include <mled/mled.h>
 #include <mosc/mosc.h>
 #include <musb/musb.h> 
+#include <musb/musb_vendor.h> 
 
 #include <pico_zest/time/pico_profiler.h>
 
@@ -28,6 +29,7 @@ int main()
     Profiler::SetProfileSettings(settings);
 
     Profiler::Init();
+    Profiler::SetPaused(true);
 
     //set_sys_clock_khz(240000, true);
 
@@ -53,6 +55,18 @@ int main()
     while(1) 
     {
         Profiler::NewFrame();
+
+    
+        PROFILE_SCOPE(main_loop);
+        {
+            PROFILE_SCOPE(child1);
+            {
+                PROFILE_SCOPE(child2);
+                {
+                    PROFILE_SCOPE(child3);
+                }
+            }
+        }
         // Update the clock in this refresh?
         /*
         bool update_clock = false;
@@ -66,7 +80,10 @@ int main()
 
         m_usb_update();
 
-        Profiler::Dump();
+        if (Profiler::DumpReady())
+        {
+            vendor_dump_profile();
+        }
     }
 
     Profiler::Finish();

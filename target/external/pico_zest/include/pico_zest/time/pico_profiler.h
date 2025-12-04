@@ -7,6 +7,10 @@
 
 #include <pico/sync.h>
 
+#include <pico_zest/file/serializer.h>
+
+#include "profiler_data.h"
+
 namespace Zest
 {
 
@@ -53,52 +57,6 @@ public:
 
     PicoMutex& myMutex;
 };
-struct ProfilerEntry
-{
-    // static infos
-    const char* szSection;
-    const char* szFile;
-    int line;
-    unsigned int color;
-    // infos used for rendering infos
-    int level = 0;
-    int64_t startTime;
-    int64_t endTime;
-    uint32_t parent;
-};
-
-struct FrameThreadInfo
-{
-    uint32_t threadIndex;
-    uint32_t activeEntry;
-};
-
-struct Region
-{
-    std::string name;
-    int64_t startTime;
-    int64_t endTime;
-};
-
-struct Frame : Region
-{
-    uint32_t frameThreadCount = 0;
-    std::vector<FrameThreadInfo> frameThreads;
-};
-
-struct ThreadData
-{
-    bool initialized;
-    uint32_t callStackDepth = 0;
-    uint32_t maxLevel = 0;
-    int64_t minTime;
-    int64_t maxTime;
-    uint32_t currentEntry = 0;
-    bool hidden = false;
-    std::string name;
-    std::vector<ProfilerEntry> entries;
-    std::vector<uint32_t> entryStack;
-};
 
 struct ProfileSettings
 {
@@ -111,6 +69,7 @@ struct ProfileSettings
 
 void SetProfileSettings(const ProfileSettings& settings);
 void Init();
+void Reset();
 void NewFrame();
 void NameThread(const char* pszName);
 void SetPaused(bool pause);
@@ -121,7 +80,8 @@ void PushSectionBase(const char*, uint32_t, const char*, int);
 void PopSection();
 void HideThread();
 void Finish();
-void Dump();
+bool DumpReady();
+std::ostringstream Dump();
 
 struct ProfileScope
 {

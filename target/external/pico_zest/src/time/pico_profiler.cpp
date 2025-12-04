@@ -2,6 +2,7 @@
 #include <atomic>
 #include <cassert>
 #include <utility>
+#include <map>
 
 #include <pico_zest/math/math_utils.h>
 #include <pico_zest/string/murmur_hash.h>
@@ -10,8 +11,6 @@
 
 #include <pico/stdlib.h>
 #include <iostream>
-
-#include <pico_zest/file/serializer.h>
 
 using namespace std::chrono;
 using namespace Zest;
@@ -43,32 +42,24 @@ namespace Zest
 namespace Profiler
 {
 
+namespace
+{
 PicoMutex gMutex;
 
 ProfileSettings settings;
 
-namespace
-{
 Zest::timer gTimer;
 bool gPaused = true;
 bool gRequestPause = false;
 bool gRestarting = true;
+bool gDumped = false;
 
 std::atomic<uint64_t> gProfilerGeneration = 0;
 thread_local int gThreadIndexTLS = -1;
 thread_local uint64_t gGenerationTLS = -1;
-
-std::vector<ThreadData> gThreadData;
-std::vector<Frame> gFrameData;
-std::vector<Region> gRegionData;
-
-int64_t gMaxFrameTime = duration_cast<nanoseconds>(milliseconds(20)).count();
-uint32_t gCurrentFrame = 0;
-
-// Region
-uint32_t gCurrentRegion = 0;
-
 std::vector<glm::vec4> DefaultColors;
+
+ProfilerData gProfilerData;
 
 } // namespace
 
@@ -100,13 +91,13 @@ void Init()
 {
     CalculateColors();
 
-    gThreadData.resize(settings.MaxThreads);
+    gProfilerData.threadData.resize(settings.MaxThreads);
 
     gProfilerGeneration++;
 
     for (uint32_t iZero = 0; iZero < settings.MaxThreads; iZero++)
     {
-        ThreadData* threadData = &gThreadData[iZero];
+        ThreadData* threadData = &gProfilerData.threadData[iZero];
         threadData->initialized = iZero == 0;
         threadData->maxLevel = 0;
         threadData->minTime = std::numeric_limits<int64_t>::max();
@@ -119,9 +110,9 @@ void Init()
         threadData->callStackDepth = 0;
     }
 
-    gFrameData.resize(settings.MaxFrames);
-    gRegionData.resize(settings.MaxRegions);
-    for (auto& frame : gFrameData)
+    gProfilerData.frameData.resize(settings.MaxFrames);
+    gProfilerData.regionData.resize(settings.MaxRegions);
+    for (auto& frame : gProfilerData.frameData)
     {
         frame.frameThreads.resize(settings.MaxThreads);
         frame.frameThreadCount = 0;
@@ -134,11 +125,12 @@ void Init()
 
     gThreadIndexTLS = 0;
     gGenerationTLS = 0;
-    gThreadData[0].initialized = true;
+    gProfilerData.threadData[0].initialized = true;
     gRestarting = true;
-    gCurrentFrame = 0;
-    gCurrentRegion = 0;
-    gMaxFrameTime = duration_cast<nanoseconds>(milliseconds(30)).count();
+    gProfilerData.currentFrame = 0;
+    gProfilerData.currentRegion = 0;
+    gDumped = false;
+    gProfilerData.maxFrameTime = duration_cast<nanoseconds>(milliseconds(30)).count();
     timer_start(gTimer);
 
     gPaused = false;
@@ -150,7 +142,7 @@ void InitThread()
 
     for (uint32_t iThread = 0; iThread < settings.MaxThreads; iThread++)
     {
-        ThreadData* threadData = &gThreadData[iThread];
+        ThreadData* threadData = &gProfilerData.threadData[iThread];
         if (!threadData->initialized)
         {
             // use it
@@ -169,13 +161,13 @@ void FinishThread()
 {
     PicoLockGuard lock(gMutex);
     assert(gThreadIndexTLS > -1 && "Trying to finish an uninitilized thread.");
-    gThreadData[gThreadIndexTLS].initialized = false;
+    gProfilerData.threadData[gThreadIndexTLS].initialized = false;
     gThreadIndexTLS = -1;
 }
 
 void Finish()
 {
-    gThreadData.clear();
+    gProfilerData.threadData.clear();
 }
 
 void SetPaused(bool pause)
@@ -186,28 +178,45 @@ void SetPaused(bool pause)
     }
 }
 
-static bool dumped = false;
-void serialize(binary_writer& w, const ThreadData& t) {
-    serialize(w, t);
-}
-
-void deserialize(binary_reader& r, ThreadData& t) {
-    deserialize(r, t);
-}
-
-void Dump()
+bool DumpReady()
 {
-    if (!dumped && gPaused)
+    return gPaused && !gDumped;
+}
+
+std::ostringstream Dump()
+{
+    std::ostringstream ss;
+    if (!gDumped && gPaused)
     {
-        std::stringstream ss;
+        std::map<uint64_t, std::string> stringMap;
+        for (auto& thread : gProfilerData.threadData)
+        {
+            for (auto& entry : thread.entries)
+            {
+                if (entry.szSection != nullptr)
+                {
+                    stringMap[reinterpret_cast<uint64_t>(entry.szSection)] = std::string(entry.szSection);
+                }
+                if (entry.szFile != nullptr)
+                {
+                    stringMap[reinterpret_cast<uint64_t>(entry.szFile)] = std::string(entry.szFile);
+                }
+            }
+
+        }
+
+        for (auto& [ptr, str] : stringMap)
+        {
+            gProfilerData.stringPointers.push_back(ptr);
+            gProfilerData.strings.push_back(str);
+        }
+
         Zest::binary_writer writer(ss);
-        serialize(writer, gThreadData);
-        /*printf("ThreadData: %zu\r\n", gThreadData.size());
-        printf("FrameData: %zu\r\n", gFrameData.size());
-        printf("RegionData: %zu\r\n", gRegionData.size());
-        */
-        dumped = true;
+        serialize(writer, gProfilerData);
+
+        gDumped = true;
     }
+    return ss;
 }
 
 ThreadData* GetThreadData()
@@ -222,7 +231,7 @@ ThreadData* GetThreadData()
         InitThread();
     }
 
-    return &gThreadData[gThreadIndexTLS];
+    return &gProfilerData.threadData[gThreadIndexTLS];
 }
 
 void HideThread()
@@ -244,19 +253,19 @@ void Reset()
 
 bool CheckEndState()
 {
-    if (gThreadData[gThreadIndexTLS].currentEntry >= settings.MaxEntriesPerThread)
+    if (gProfilerData.threadData[gThreadIndexTLS].currentEntry >= settings.MaxEntriesPerThread)
     {
         gPaused = true;
         gRequestPause = true;
     }
 
-    if (gCurrentFrame >= settings.MaxFrames)
+    if (gProfilerData.currentFrame >= settings.MaxFrames)
     {
         gPaused = true;
         gRequestPause = true;
     }
 
-    if (gCurrentRegion >= settings.MaxRegions)
+    if (gProfilerData.currentRegion >= settings.MaxRegions)
     {
         gPaused = true;
         gRequestPause = true;
@@ -270,6 +279,8 @@ void PushSectionBase(const char* szSection, uint32_t color, const char* szFile, 
     {
         return;
     }
+    
+    auto elapsed = timer_get_elapsed(gTimer).count();
 
     ThreadData* threadData = GetThreadData();
     if (CheckEndState())
@@ -306,7 +317,7 @@ void PushSectionBase(const char* szSection, uint32_t color, const char* szFile, 
     profilerEntry->szFile = szFile;
     profilerEntry->szSection = szSection;
     profilerEntry->line = line;
-    profilerEntry->startTime = timer_get_elapsed(gTimer).count();
+    profilerEntry->startTime = elapsed;
     profilerEntry->endTime = std::numeric_limits<int64_t>::max();
     profilerEntry->level = threadData->callStackDepth;
     threadData->callStackDepth++;
@@ -321,9 +332,9 @@ void PushSectionBase(const char* szSection, uint32_t color, const char* szFile, 
     if (threadData->currentEntry == 1)
     {
         // Add this thread to the current frame info
-        if (gCurrentFrame > 0)
+        if (gProfilerData.currentFrame > 0)
         {
-            auto& frame = gFrameData[gCurrentFrame - 1];
+            auto& frame = gProfilerData.frameData[gProfilerData.currentFrame - 1];
             auto& threadInfo = frame.frameThreads[frame.frameThreadCount];
             threadInfo.activeEntry = threadData->currentEntry - 1;
             threadInfo.threadIndex = gThreadIndexTLS;
@@ -401,7 +412,7 @@ void BeginRegion()
         return;
     }
 
-    auto& region = gRegionData[gCurrentRegion];
+    auto& region = gProfilerData.regionData[gProfilerData.currentRegion];
     region.startTime = timer_get_elapsed(gTimer).count();
 }
 
@@ -418,11 +429,11 @@ void EndRegion()
         return;
     }
 
-    auto& region = gRegionData[gCurrentRegion];
+    auto& region = gProfilerData.regionData[gProfilerData.currentRegion];
     region.endTime = timer_get_elapsed(gTimer).count();
-    region.name = std::format("{:.2f}ms", float(timer_to_ms(nanoseconds(region.endTime - region.startTime))));
+    region.name = "R";//std::format("{:.2f}ms", float(timer_to_ms(nanoseconds(region.endTime - region.startTime))));
 
-    gCurrentRegion++;
+    gProfilerData.currentRegion++;
 }
 
 void NewFrame()
@@ -432,15 +443,16 @@ void NewFrame()
         return;
     }
 
+    auto elapsed = timer_get_elapsed(gTimer).count();
     if (CheckEndState())
     {
         return;
     }
 
-    auto& frame = gFrameData[gCurrentFrame];
+    auto& frame = gProfilerData.frameData[gProfilerData.currentFrame];
     for (uint32_t threadIndex = 0; threadIndex < settings.MaxThreads; threadIndex++)
     {
-        auto& thread = gThreadData[threadIndex];
+        auto& thread = gProfilerData.threadData[threadIndex];
         if (!thread.initialized)
         {
             continue;
@@ -457,13 +469,13 @@ void NewFrame()
         }
     }
 
-    frame.startTime = timer_get_elapsed(gTimer).count();
-    if (gCurrentFrame > 0)
+    frame.startTime = elapsed;
+    if (gProfilerData.currentFrame > 0)
     {
-        gFrameData[gCurrentFrame - 1].endTime = frame.startTime;
-        gFrameData[gCurrentFrame - 1].name = std::format("{:.2f}ms", float(timer_to_ms(nanoseconds(frame.startTime - gFrameData[gCurrentFrame - 1].startTime))));
+        gProfilerData.frameData[gProfilerData.currentFrame - 1].endTime = frame.startTime;
+        gProfilerData.frameData[gProfilerData.currentFrame - 1].name = "F";//std::format("{:.2f}ms", float(timer_to_ms(nanoseconds(frame.startTime - gProfilerData.frameData[gProfilerData.currentFrame - 1].startTime))));
     }
-    gCurrentFrame++;
+    gProfilerData.currentFrame++;
 }
 
 const glm::vec4& ColorFromName(const char* pszName, const uint32_t len)

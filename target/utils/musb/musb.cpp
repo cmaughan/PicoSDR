@@ -111,6 +111,7 @@ void audio_task(void)
 // Invoked when audio class specific set request received for an EP
 bool tud_audio_set_req_ep_cb(uint8_t rhport, tusb_control_request_t const* p_request, uint8_t* pBuff)
 {
+    PROFILE_SCOPE(tud_audio_set_req_ep_cb);
     TU_LOG1("tud_audio_set_req_ep_cb\r\n");
     (void)rhport;
     (void)pBuff;
@@ -133,6 +134,7 @@ bool tud_audio_set_req_ep_cb(uint8_t rhport, tusb_control_request_t const* p_req
 // Invoked when audio class specific set request received for an interface
 bool tud_audio_set_req_itf_cb(uint8_t rhport, tusb_control_request_t const* p_request, uint8_t* pBuff)
 {
+    PROFILE_SCOPE(tud_audio_set_req_itf_cb);
     TU_LOG1("tud_audio_set_req_itf_cb\r\n");
     (void)rhport;
     (void)pBuff;
@@ -158,6 +160,8 @@ bool tud_audio_set_req_entity_cb(uint8_t rhport, tusb_control_request_t const* p
     (void)rhport;
 
     TU_LOG1("tud_audio_set_req_entity_cb\r\n");
+
+    PROFILE_SCOPE(tud_audio_set_req_entity_cb);
 
     // Page 91 in UAC2 specification
     uint8_t channelNum = TU_U16_LOW(p_request->wValue);
@@ -207,6 +211,7 @@ bool tud_audio_get_req_ep_cb(uint8_t rhport, tusb_control_request_t const* p_req
 {
     (void)rhport;
 
+    PROFILE_SCOPE(tud_audio_get_req_ep_cb);
     TU_LOG1("tud_audio_get_req_ep_cb\r\n");
 
     // Page 91 in UAC2 specification
@@ -228,6 +233,7 @@ bool tud_audio_get_req_itf_cb(uint8_t rhport, tusb_control_request_t const* p_re
 {
     (void)rhport;
 
+    PROFILE_SCOPE(tud_audio_get_req_itf_cb);
     TU_LOG1("tud_audio_get_req_itf_cb\r\n");
 
     // Page 91 in UAC2 specification
@@ -247,6 +253,7 @@ bool tud_audio_get_req_entity_cb(uint8_t rhport, tusb_control_request_t const* p
 {
     (void)rhport;
 
+    PROFILE_SCOPE(tud_audio_get_req_entity_cb);
     TU_LOG1("tud_audio_get_req_entity_cb\r\n");
 
     // Page 91 in UAC2 specification
@@ -382,6 +389,8 @@ namespace MPico
 //--------------------------------------------------------------------+
 void led_blinking_task(void)
 {
+    PROFILE_SCOPE(led_blinking_task);
+
     static uint32_t start_ms = 0;
     static bool led_state = false;
 
@@ -410,6 +419,7 @@ void fill_sine_i16(int16_t* buf, int count)
 }
 void m_usb_init()
 {
+    PROFILE_SCOPE(m_usb_init);
     board_init();
 
     // init device stack on configured roothub port

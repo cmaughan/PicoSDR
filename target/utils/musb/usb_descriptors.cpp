@@ -97,11 +97,11 @@ enum
         + TUD_VENDOR_DESC_LEN)
 #endif
 
-#define EPNUM_AUDIO 0x02
-#define EPNUM_MIDI_OUT 0x01
-#define EPNUM_MIDI_IN 0x81
-#define EPNUM_VENDOR_IN 0x82
-#define EPNUM_VENDOR_OUT 0x03
+#define EPNUM_AUDIO 0x01
+#define EPNUM_MIDI_OUT 0x02
+#define EPNUM_MIDI_IN 0x82
+#define EPNUM_VENDOR_IN 0x83
+#define EPNUM_VENDOR_OUT 0x03 
 
 static_assert(EPNUM_MIDI_OUT != EPNUM_AUDIO, "MIDI OUT and AUDIO IN endpoint numbers must be different");
 static_assert(EPNUM_MIDI_IN != EPNUM_AUDIO, "MIDI OUT and AUDIO IN endpoint numbers must be different");

@@ -16,6 +16,9 @@
 
 #include <libusb/libusb/libusb/libusb.h>
 
+#include <zest/file/serializer.h>
+#include <zest/time/profiler_data.h>
+
 using namespace Zing;
 using namespace Zest;
 using namespace std::chrono;
@@ -150,21 +153,30 @@ void demo_register_windows()
 const uint32_t VID = 0xcafe;
 const uint32_t PID = 0x4038;
 
-#define EPNUM_VENDOR_IN 0x82
+#define EPNUM_VENDOR_IN 0x83
 #define EPNUM_VENDOR_OUT 0x03
 
 libusb_context* ctx = nullptr;
 libusb_device_handle* dev = nullptr;
 
+std::atomic<bool> quitBulkVendorThread = false;
+std::thread bulkThread;
+
 void demo_bulk_vendor_release()
 {
+    quitBulkVendorThread = true;
+    if (bulkThread.joinable())
+    {
+        bulkThread.join();
+    }
+
     if (dev)
     {
         libusb_release_interface(dev, VID);
         libusb_close(dev);
         dev = nullptr;
     }
-   
+
     if (ctx)
     {
         libusb_exit(ctx);
@@ -174,32 +186,108 @@ void demo_bulk_vendor_release()
 
 void demo_bulk_vendor_init()
 {
+    ctx = nullptr;
+    dev = nullptr;
 
     int r = libusb_init(&ctx);
-    if (r != 0) {
-        //std::cerr << "libusb_init failed: " << r << "\n";
+    if (r != 0)
+    {
         return;
     }
 
     dev = libusb_open_device_with_vid_pid(ctx, VID, PID);
-    if (!dev) {
+    if (!dev)
+    {
         //std::cerr << "Could not open device\n";
         libusb_exit(ctx);
+        ctx = nullptr;
         return;
     }
 
     r = libusb_claim_interface(dev, 4);
-    if (r != 0) {
+    if (r != 0)
+    {
         //std::cerr << "Failed to claim interface: " << r << "\n";
         libusb_close(dev);
         libusb_exit(ctx);
+        ctx = nullptr;
+        dev = nullptr;
         return;
     }
 
-    libusb_bulk_transfer(dev, EPNUM_VENDOR_OUT, (unsigned char*)"Hello, World!", 14, nullptr, 1000);
+    bulkThread = std::move(std::thread([]() {
+        std::vector<uint8_t> data;
+        while (ctx && dev)
+        {
+            uint32_t sz;
+            int got;
+            auto ret = libusb_bulk_transfer(dev, EPNUM_VENDOR_IN, (unsigned char*)&sz, sizeof(sz), &got, 1000);
+            if (ret == 0 && sz != 0)
+            {
+                data.clear();
 
-    char in[16] = {0};
-    libusb_bulk_transfer(dev, EPNUM_VENDOR_IN, (unsigned char*)&in[0], 14, nullptr, 1000);
+                uint32_t required = sz;
+                std::vector<uint8_t> buffer;
+                buffer.resize(64);
+                while (sz != 0)
+                {
+                    auto req = std::min(uint32_t(64), sz);
+
+                    ret = libusb_bulk_transfer(dev, EPNUM_VENDOR_IN, (unsigned char*)buffer.data(), int(req), &got, 1000);
+                    if (got == 0)
+                    {
+                        break;
+                    }
+                    sz -= got;
+                    data.insert(data.end(), buffer.begin(), buffer.begin() + got);
+                }
+
+                if (data.size() == required)
+                {
+                    auto profileData = std::make_shared<Profiler::ProfilerData>();
+                    
+                    Zest::binary_reader reader(data);
+
+                    deserialize(reader, *profileData);
+
+                    std::map<uint64_t, const char*> mapStrings;
+                    for (uint32_t id = 0; id < profileData->stringPointers.size(); id++)
+                    {
+                        mapStrings[profileData->stringPointers[id]] = profileData->strings[id].c_str();
+                    }
+
+                    for (auto& thread : profileData->threadData)
+                    {
+                        for (auto& entry : thread.entries)
+                        {
+                            entry.szFile = mapStrings[entry.oldFilePointer];
+                            entry.szSection = mapStrings[entry.oldSectionPointer];
+                        }
+                    }
+
+                    Profiler::UnDump(profileData);
+                }
+
+            }
+
+            // Thread sleep
+            if (quitBulkVendorThread)
+            {
+                break;
+            }
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    }));
+}
+
+void demo_bulk_vendor_get_profile()
+{
+    if (ctx && dev)
+    {
+        uint8_t out[1] = {1};
+        auto ret = libusb_bulk_transfer(dev, EPNUM_VENDOR_OUT, (unsigned char*)&out[0], 1, nullptr, 1000);
+    }
 }
 
 void demo_init()
@@ -268,6 +356,11 @@ void demo_draw_menu()
         {
             layout_manager_do_menu();
             ImGui::EndMenu();
+        }
+
+        if (ImGui::MenuItem("Get Profile Pico"))
+        {
+            demo_bulk_vendor_get_profile();
         }
 
         ImGui::EndMainMenuBar();
