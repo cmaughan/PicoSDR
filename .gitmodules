@@ -22,3 +22,6 @@
 [submodule "target/external/dragonbox"]
 	path = target/external/dragonbox
 	url = https://github.com/cmaughan/dragonbox.git
+[submodule "shared/external/libusb"]
+	path = shared/external/libusb
+	url = https://github.com/cmaughan/libusb-cmake

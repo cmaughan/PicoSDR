@@ -22,7 +22,7 @@
 
 #include "demo.h"
 
-#include <libusb/libusb/libusb/libusb.h>
+#include <libusb/libusb/libusb.h>
 
 
 namespace fs = std::filesystem;

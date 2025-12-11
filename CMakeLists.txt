@@ -29,4 +29,5 @@ find_package(glm CONFIG REQUIRED)
 
 add_subdirectory(target/external/zest)
 add_subdirectory(shared/external/remidi)
+add_subdirectory(shared/external/libusb)
 add_subdirectory(testbed)

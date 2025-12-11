@@ -8,7 +8,7 @@
 #include <functional>
 #include <chrono>
 #include <cmath>
-#include <fmt/format.h>
+#include <format>
 
 #include <filesystem>
 

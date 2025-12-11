@@ -14,6 +14,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/demo_common.cmake)
 
 find_package(Vulkan REQUIRED)
 
+
 set(TESTBED_APP_SOURCE
     ${APP_ROOT}/main.cpp
     ${APP_ROOT}/demo.cpp
@@ -37,6 +38,8 @@ target_include_directories(${APP_NAME}
     ${CMAKE_CURRENT_LIST_DIR}
     ${CMAKE_BINARY_DIR}
     ${PICO_SDR_ROOT}
+    ${PICO_SDR_ROOT}/shared/external/libusb
+
     ${PICO_SDR_ROOT}/target/external/pico_zest/include
     ${PICO_SDR_ROOT}/target/external/zest/include
     )
@@ -45,6 +48,7 @@ target_link_libraries (${APP_NAME}
 PRIVATE
     Zest::Zest
     Zing::Zing
+    usb-1.0
     Vulkan::Vulkan
     ${PLATFORM_LINKLIBS}
     )

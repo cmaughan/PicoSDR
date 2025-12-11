@@ -14,7 +14,7 @@
 
 #include <libremidi/reader.hpp>
 
-#include <libusb/libusb/libusb/libusb.h>
+#include <libusb/libusb/libusb.h>
 
 #include <remidi/include/libremidi/libremidi.hpp>
 
