@@ -73,154 +73,14 @@ void audio_retire_bundle(std::shared_ptr<AudioBundle>& pBundle)
     audioContext.spareBundles.enqueue(pBundle);
 }
 
-/*
-LinkData audio_pull_link_data()
-{
-    auto& ctx = audioContext;
-    auto linkData = LinkData{};
-    if (ctx.m_linkDataGuard.try_lock())
-    {
-        linkData.requestedTempo = ctx.m_linkData.requestedTempo;
-        ctx.m_linkData.requestedTempo = 0;
-        linkData.requestStart = ctx.m_linkData.requestStart;
-        ctx.m_linkData.requestStart = false;
-        linkData.requestStop = ctx.m_linkData.requestStop;
-        ctx.m_linkData.requestStop = false;
-
-        ctx.m_lockFreeLinkData.quantum = ctx.m_linkData.quantum;
-        ctx.m_lockFreeLinkData.startStopSyncOn = ctx.m_linkData.startStopSyncOn;
-
-        ctx.m_linkDataGuard.unlock();
-    }
-    linkData.quantum = ctx.m_lockFreeLinkData.quantum;
-
-    return linkData;
-}
-
-void audio_play_metronome(const Link::SessionState sessionState, const double quantum, const std::chrono::microseconds beginHostTime, void* pOutput, const std::size_t numSamples)
-{
-    PROFILE_SCOPE(Metronome);
-
-    auto& ctx = audioContext;
-    using namespace std::chrono;
-
-    // Metronome frequencies
-    static const double highTone = 1567.98f;
-    static const double lowTone = 1108.73f;
-
-    // 100ms click duration
-    static const auto clickDuration = duration<double>{0.1};
-
-    // The number of microseconds that elapse between samples
-    const auto microsPerSample = 1e6 / ctx.outputState.sampleRate;
-    const auto fracSec = (1.0 / (double)ctx.outputState.sampleRate);
-
-    auto pOut = (float*)pOutput;
-
-    for (std::size_t i = 0; i < numSamples; ++i)
-    {
-        float amplitude = 0.0f;
-
-        // Compute the host time for this sample and the last.
-        const auto hostTime = beginHostTime + microseconds(llround(static_cast<double>(i) * microsPerSample));
-
-        // Only make sound for positive beat magnitudes. Negative beat
-        // magnitudes are count-in beats.
-        auto beat = sessionState.beatAtTime(hostTime, quantum);
-        if (int64_t(beat) > ctx.m_lastClickBeat)
-        {
-            ctx.m_lastClickBeat = int64_t(beat);
-
-            // If we're within the click duration of the last beat, render
-            // the click tone into this sample
-            if (!ctx.m_clicking)
-            {
-                ctx.m_clickFrequency = floor(sessionState.phaseAtTime(hostTime, quantum)) == 0 ? highTone : lowTone;
-                ctx.m_clickTime = 0.0;
-                ctx.m_clicking = true;
-            }
-        }
-
-        if (ctx.m_clicking && ctx.settings.enableMetronome)
-        {
-            // Simple cosine synth
-            amplitude = float(cos(2 * glm::pi<double>() * ctx.m_clickTime * ctx.m_clickFrequency) * (1 - sin(5 * glm::pi<double>() * ctx.m_clickTime)));
-            ctx.m_clickTime += fracSec;
-
-            if (ctx.m_clickTime > 0.1)
-            {
-                ctx.m_clicking = false;
-            }
-        }
-        else
-        {
-            amplitude = 0.0;
-        }
-
-        for (uint32_t ch = 0; ch < ctx.outputState.channelCount; ch++)
-        {
-            *pOut++ = amplitude;
-        }
-    }
-}
-*/
 
 void audio_start_playing()
 {
-    /*
-    auto& ctx = audioContext;
-    LOCK_GUARD(ctx.m_linkDataGuard, LinkDataGuard);
-    ctx.m_linkData.requestStart = true;
-    ctx.m_link.enable(true);
-    */
+
 }
 
 void audio_pre_callback(const std::chrono::microseconds hostTime, void* pOutput, uint32_t frameCount)
 {
-    /*
-    auto& ctx = audioContext;
-
-    const auto engineData = audio_pull_link_data();
-
-    auto sessionState = ctx.m_link.captureAudioSessionState();
-
-    if (engineData.requestStart)
-    {
-        sessionState.setIsPlaying(true, hostTime);
-    }
-
-    if (engineData.requestStop)
-    {
-        sessionState.setIsPlaying(false, hostTime);
-    }
-
-    if (!ctx.m_isPlaying && sessionState.isPlaying())
-    {
-        // Reset the timeline so that beat 0 corresponds to the time when transport starts
-        sessionState.requestBeatAtStartPlayingTime(0, engineData.quantum);
-        ctx.m_isPlaying = true;
-    }
-    else if (ctx.m_isPlaying && !sessionState.isPlaying())
-    {
-        ctx.m_isPlaying = false;
-    }
-
-    if (engineData.requestedTempo > 0)
-    {
-        // Set the newly requested tempo from the beginning of this buffer
-        sessionState.setTempo(engineData.requestedTempo, hostTime);
-    }
-
-    // Timeline modifications are complete, commit the results
-    ctx.m_link.commitAudioSessionState(sessionState);
-
-    if (ctx.m_isPlaying && pOutput)
-    {
-        // As long as the engine is playing, generate metronome clicks in
-        // the buffer at the appropriate beats.
-        audio_play_metronome(sessionState, engineData.quantum, hostTime, pOutput, frameCount);
-    }
-    */
 }
 
 void audio_process_midi(void* pOutput, uint32_t frameCount)
@@ -345,18 +205,7 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
         const double sampleRate = static_cast<double>(ctx.outputState.sampleRate);
         const auto bufferDuration = duration_cast<microseconds>(duration<double>{nBufferFrames / sampleRate});
 
-        // Link
-        //auto hostTimeAtFrame = ctx.m_hostTimeFilter.sampleTimeToHostTime(double(ctx.m_totalFrames));
-        //ctx.m_totalFrames += nBufferFrames;
-        //const auto bufferBeginAtOutput = hostTimeAtFrame + ctx.m_outputLatency.load();
-        // Link
-
         auto samples = (float*)outputBuffer;
-
-        // Ensure TP has same tempo
-        // TimeProvider::Instance().SetTempo(sessionState.tempo(), 4.0);
-
-        //audio_pre_callback(hostTimeAtFrame, outputBuffer, nBufferFrames);
 
         audio_process_midi(outputBuffer, nBufferFrames);
 
