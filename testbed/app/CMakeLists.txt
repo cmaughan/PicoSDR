@@ -38,6 +38,7 @@ target_include_directories(${APP_NAME}
     ${CMAKE_BINARY_DIR}
     ${PICO_SDR_ROOT}
     ${PICO_SDR_ROOT}/target/external/pico_zest/include
+    ${PICO_SDR_ROOT}/target/external/zest/include
     )
 
 target_link_libraries (${APP_NAME}
@@ -45,7 +46,6 @@ PRIVATE
     Zest::Zest
     Zing::Zing
     Vulkan::Vulkan
-    usb-1.0
     ${PLATFORM_LINKLIBS}
     )
 

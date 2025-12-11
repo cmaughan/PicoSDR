@@ -1,5 +1,7 @@
 #include <zing/pch.h>
 
+#include <format>
+
 #include <zest/settings/settings.h>
 
 #include <zing/audio/audio.h>
@@ -1120,7 +1122,7 @@ void audio_show_settings_gui()
 
 std::string audio_to_channel_name(ChannelId id)
 {
-    return fmt::format("{}:{}", id.first == Channel_In ? "I" : (id.first == Channel_Out ? "O" : std::to_string(id.first)), id.second == 0 ? "L" : (id.second == 1 ? "R" : std::to_string(id.second)));
+    return std::format("{}:{}", id.first == Channel_In ? "I" : (id.first == Channel_Out ? "O" : std::to_string(id.first)), id.second == 0 ? "L" : (id.second == 1 ? "R" : std::to_string(id.second)));
 }
 
 ChannelId audio_to_channel_id(uint32_t channel_type, uint32_t channel)

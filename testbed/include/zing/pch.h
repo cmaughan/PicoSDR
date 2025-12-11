@@ -26,7 +26,7 @@
 
 #include <glm/gtc/constants.hpp>
 
-#include <zest/include/zest/ui/imgui_extras.h>
+#include <zest/ui/imgui_extras.h>
 #include <zest/math/imgui_glm.h>
 
 extern "C" {
