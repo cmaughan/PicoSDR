@@ -50,13 +50,6 @@ add_executable(${PROJECT_NAME}
     ${ROOT}/external/pico_zest/include/pico_zest/time/pico_profiler.h
     ${ROOT}/external/pico_zest/src/time/pico_profiler.cpp
     ${ROOT}/external/zest/src/time/timer.cpp
-    ${ROOT}/external/soundpipe/osc.c
-    ${ROOT}/external/soundpipe/osc.h
-    ${ROOT}/external/soundpipe/ftbl.c
-    ${ROOT}/external/soundpipe/ftbl.h
-    ${ROOT}/external/soundpipe/base.c
-    ${ROOT}/external/soundpipe/base.h
-    ${ROOT}/external/soundpipe/soundpipe.h
 )
 
 # pull in common dependencies and additional i2c hardware support
