@@ -1,6 +1,6 @@
+#include <bsp/board_api.h>
 #include <cmath>
 #include <cstddef>
-#include <bsp/board_api.h>
 #include <musb/tusb_config.h>
 #include <tusb.h>
 
@@ -8,10 +8,6 @@
 #include <pico_zest/time/pico_profiler.h>
 
 #include <mled/mled.h>
-
-extern "C" {
-#include "soundpipe/soundpipe.h"
-}
 
 using namespace Zest;
 
@@ -31,17 +27,16 @@ audio20_control_range_4_n_t(1) sampleFreqRng; // Sample frequency range state
 // Audio test data, 4 channels muxed together, buffer[0] for CH0, buffer[1] for CH1, buffer[2] for CH2, buffer[3] for CH3
 const uint32_t buffer_time = AUDIO_SAMPLE_RATE / 1000; // 1ms buffer
 const uint32_t buffer_samples = buffer_time * CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_TX;
-std::array<int16_t, buffer_samples> i2s_dummy_buffer;
-uint32_t bufferSample = 0;
 
-sp_data* pSP = nullptr;
-sp_osc* osc = nullptr;
-sp_ftbl* ft = nullptr;
+const uint32_t num_buffer_pages = 20;
+uint32_t current_buffer_page = 0;
+std::array<std::array<int16_t, buffer_samples>, num_buffer_pages> i2s_dummy_buffer;
+uint32_t bufferSample = 0;
 
 class SineOsc
 {
 public:
-    static constexpr std::size_t TABLE_SIZE = 1024;
+    static constexpr std::size_t TABLE_SIZE = 8096;
 
     explicit SineOsc(double sampleRate)
         : sampleRate_(sampleRate)
@@ -49,7 +44,7 @@ public:
         // Build wavetable
         for (std::size_t i = 0; i < TABLE_SIZE; ++i)
         {
-            table_[i] = std::sin(2.0 * M_PI * i / TABLE_SIZE);
+            table_[i] = std::sin(2.0 * M_PI * i / double(TABLE_SIZE));
         }
         setFrequency(440.0);
     }
@@ -74,7 +69,7 @@ public:
 
 private:
     double sampleRate_;
-    double phase_    = 0.0;
+    double phase_ = 0.0;
     double phaseInc_ = 0.0;
 
     float table_[TABLE_SIZE];
@@ -368,37 +363,10 @@ void audio_init()
     sampleFreqRng.subrange[0].bMin = AUDIO_SAMPLE_RATE;
     sampleFreqRng.subrange[0].bMax = AUDIO_SAMPLE_RATE;
     sampleFreqRng.subrange[0].bRes = 0;
-
-    /*
-    {
-        sp_destroy(&ctx.pSP);
-        ctx.pSP = nullptr;
-    }
-        */
-
-    sp_create(&pSP);
-    pSP->nchan = 1;
-    pSP->sr = AUDIO_SAMPLE_RATE;
-    pSP->len = pSP->sr * 5;
-
-    if (!osc)
-    {
-        sp_ftbl_create(pSP, &ft, AUDIO_SAMPLE_RATE);
-        sp_osc_create(&osc);
-
-        sp_gen_sine(pSP, ft);
-        sp_osc_init(pSP, osc, ft, 0);
-        osc->freq = 650.0f;
-        //osc->amp = 0.8f;
-    }
 }
 
 void audio_set_frequency(uint32_t frequency)
 {
-    if (osc)
-    {
-        osc->freq = float(frequency);
-    }
     sineOsc.setFrequency(float(frequency));
 }
 
@@ -417,31 +385,22 @@ void audio_task(void)
 
     static uint32_t start_ms = 0;
     uint32_t curr_ms = board_millis();
-    if (curr_ms < (start_ms))
+    if (curr_ms < (start_ms + 1))
     {
         return; // not enough time
     }
     start_ms = curr_ms;
 
-    //if (bufferSample < buffer_samples)
+    for (uint32_t sample = 0; sample < buffer_samples; sample++)
     {
-        for (uint32_t sample = 0; sample < buffer_samples; sample++)
-        {
-            //float samp = sin(2.0f * 3.14159265f * 440.0f * float(sample) / float(AUDIO_SAMPLE_RATE));
-            float samp = sineOsc.sample();
-            //sp_osc_compute(pSP, osc, &samp, &samp);
-            i2s_dummy_buffer[sample] = int16_t(samp * 32767.0f);
-        }
-        //bufferSample = buffer_samples;
-    } 
-
-    auto written = tud_audio_write((const void*)&i2s_dummy_buffer[0], uint16_t(buffer_samples * sizeof(int16_t)));
-    /*if (written > 0)
-    {
-        memcpy(&i2s_dummy_buffer[0], &i2s_dummy_buffer[written], (i2s_dummy_buffer.size() - written) * sizeof(int16_t));
-        bufferSample = i2s_dummy_buffer.size() - written;
+        float samp = sineOsc.sample();
+        i2s_dummy_buffer[current_buffer_page][sample] = int16_t(samp * 32767.0f);
     }
-        */
+
+    tud_audio_write((const void*)&i2s_dummy_buffer[current_buffer_page][0], uint16_t(buffer_samples * sizeof(int16_t)));
+
+    auto next_buffer_page = (current_buffer_page + 1) % num_buffer_pages;
+    current_buffer_page = next_buffer_page;
 }
 
 } // namespace MPico

@@ -22,9 +22,9 @@ uint64_t frequency = 7000000;
 
 int main()
 {
-    set_sys_clock_khz(240000, true); 
-
+    //set_sys_clock_khz(240000, true); 
     Profiler::ProfileSettings settings;
+
     settings.MaxThreads = 2;
     settings.MaxCallStack = 10;
     settings.MaxEntriesPerThread = 100;

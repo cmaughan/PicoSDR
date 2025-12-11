@@ -259,12 +259,14 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
 
             if (inputBuffer && outputBuffer)
             {
-                for (uint32_t i = 0; i < std::min(ctx.inputState.channelCount, ctx.outputState.channelCount); i++)
+                for (uint32_t i = 0; i < std::max(ctx.inputState.channelCount, ctx.outputState.channelCount); i++)
                 {
                     for (unsigned long index = 0; index < nBufferFrames; index++)
                     {
+                        auto sample = ((const float*)inputBuffer)[index];
+
                         // Mix input to output
-                        ((float*)outputBuffer)[index + i] += ((const float*)inputBuffer)[index + i];
+                        ((float*)outputBuffer)[(index * ctx.outputState.channelCount) + i] = sample;
                     }
                 }
             }
