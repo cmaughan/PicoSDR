@@ -115,7 +115,6 @@ void midi_read_command()
         {
             val |= ((midi_input_buffer[i] & 0x7F) << (7 * (i - start_index)));
         } 
-        //std::cout << "Frequency Set: " << val << "\n";
 
         // Temporary hack to test received message
         if (val < 20000 && val > 0)

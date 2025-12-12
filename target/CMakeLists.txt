@@ -78,6 +78,8 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
     PICO_W
     GLM_ENABLE_EXPERIMENTAL
     DISABLE_PROFILER_UI
+    $<$<CONFIG:Debug>:_DEBUG>
+    $<$<CONFIG:Debug>:DEBUG>
     )
 
     #Hide the annoying GCC9.1 parameter change stuff

@@ -1,12 +1,17 @@
-#include <bsp/board_api.h>
 #include <cmath>
+#include <cstdint>
+#include <array>
 #include <cstddef>
-#include <musb/tusb_config.h>
 #include <tusb.h>
+
+#include <bsp/board_api.h>
 
 #include <pico/stdlib.h>
 #include <pico_zest/time/pico_profiler.h>
 
+#include <zest/logger/logger.h>
+
+#include <musb/tusb_config.h>
 #include <mled/mled.h>
 
 using namespace Zest;
@@ -24,13 +29,12 @@ uint8_t clkValid;
 audio20_control_range_2_n_t(1) volumeRng[CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_TX + 1]; // Volume range state
 audio20_control_range_4_n_t(1) sampleFreqRng; // Sample frequency range state
 
-// Audio test data, 4 channels muxed together, buffer[0] for CH0, buffer[1] for CH1, buffer[2] for CH2, buffer[3] for CH3
 const uint32_t buffer_time = AUDIO_SAMPLE_RATE / 1000; // 1ms buffer
 const uint32_t buffer_samples = buffer_time * CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_TX;
 
-const uint32_t num_buffer_pages = 20;
+const uint32_t num_buffer_pages = 10;
 uint32_t current_buffer_page = 0;
-std::array<std::array<int16_t, buffer_samples>, num_buffer_pages> i2s_dummy_buffer;
+std::array<std::array<int16_t, buffer_samples>, num_buffer_pages> i2s_buffer;
 uint32_t bufferSample = 0;
 
 class SineOsc
@@ -355,6 +359,8 @@ namespace MPico
 
 void audio_init()
 {
+    LOG(DBG, "audio_init");
+
     // Init values
     sampFreq = AUDIO_SAMPLE_RATE;
     clkValid = 1;
@@ -367,6 +373,7 @@ void audio_init()
 
 void audio_set_frequency(uint32_t frequency)
 {
+    LOG(DBG, "audio_set_frequency: " << frequency);
     sineOsc.setFrequency(float(frequency));
 }
 
@@ -394,10 +401,15 @@ void audio_task(void)
     for (uint32_t sample = 0; sample < buffer_samples; sample++)
     {
         float samp = sineOsc.sample();
-        i2s_dummy_buffer[current_buffer_page][sample] = int16_t(samp * 32767.0f);
+        i2s_buffer[current_buffer_page][sample] = int16_t(samp * 32767.0f);
     }
 
-    tud_audio_write((const void*)&i2s_dummy_buffer[current_buffer_page][0], uint16_t(buffer_samples * sizeof(int16_t)));
+    auto written = tud_audio_write((const void*)&i2s_buffer[current_buffer_page][0], uint16_t(buffer_samples * sizeof(int16_t)));
+    written >>= 1;
+    if (written < buffer_samples)
+    {
+        LOG(DBG, "Overrun");
+    }
 
     auto next_buffer_page = (current_buffer_page + 1) % num_buffer_pages;
     current_buffer_page = next_buffer_page;

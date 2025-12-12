@@ -1,9 +1,11 @@
+#include "class/vendor/vendor_device.h"
 #include <bsp/board_api.h>
 #include <musb/musb_vendor.h>
 #include <musb/tusb_config.h>
 #include <tusb.h>
 
 #include <pico_zest/time/pico_profiler.h>
+#include <zest/logger/logger.h>
  
 using namespace Zest;
 
@@ -14,9 +16,11 @@ void send_blob_blocking(std::string const& payload)
     uint32_t total = static_cast<uint32_t>(payload.size());
 
     // Wait for host to have configured the interface
-    /*while (!tud_vendor_mounted()) {
-        tud_task();   // let TinyUSB handle enumeration
-    }*/
+    if (!tud_vendor_mounted())
+    {
+        LOG(DBG, "Vendor not mounted!");
+        return;
+    }
 
     // 1) Send length header
     {
@@ -41,11 +45,10 @@ void send_blob_blocking(std::string const& payload)
         tud_task(); // VERY IMPORTANT: let TinyUSB process IN tokens
 
         // Optional: check if host is still configured
-        /*
         if (!tud_vendor_mounted()) {
-            // host vanished; bail or handle error
+            LOG(DBG, "Vendor went away");
             break;
-        }*/
+        }
 
         // How much TinyUSB says we can push right now
         uint32_t avail = tud_vendor_write_available();
@@ -70,6 +73,7 @@ void vendor_dump_profile()
 {
     if (Profiler::DumpReady() && requested)
     {
+        LOG(DBG, "Dumping profile");
         auto ss = Profiler::Dump();
 
         std::string payload = ss.str();
@@ -90,7 +94,7 @@ void vendor_task()
 
         if (count == 1 && buf[0] == 1)
         {
-            // Host is requesting a dump
+            LOG(DBG, "Requesting profile");
             Profiler::Reset();
             requested = true;
         }
