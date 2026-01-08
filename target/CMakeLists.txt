@@ -59,6 +59,7 @@ target_link_libraries(${PROJECT_NAME}
     tinyusb_device 
     tinyusb_board
     hardware_i2c 
+    hardware_adc
     pico_cyw43_arch_none
     glm::glm
 )

@@ -1,7 +1,7 @@
-#include <cmath>
-#include <cstdint>
 #include <array>
+#include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <tusb.h>
 
 #include <bsp/board_api.h>
@@ -11,8 +11,8 @@
 
 #include <zest/logger/logger.h>
 
-#include <musb/tusb_config.h>
 #include <mled/mled.h>
+#include <musb/tusb_config.h>
 
 using namespace Zest;
 
@@ -36,6 +36,9 @@ const uint32_t num_buffer_pages = 10;
 uint32_t current_buffer_page = 0;
 std::array<std::array<int16_t, buffer_samples>, num_buffer_pages> i2s_buffer;
 uint32_t bufferSample = 0;
+uint32_t current_buffer_sample = 0;
+
+uint16_t adcVal;
 
 class SineOsc
 {
@@ -377,6 +380,16 @@ void audio_set_frequency(uint32_t frequency)
     sineOsc.setFrequency(float(frequency));
 }
 
+void audio_add_sample(float sample)
+{
+    if (current_buffer_sample >= buffer_samples)
+    {
+        current_buffer_sample++;
+        return; // buffer full
+    } 
+    i2s_buffer[current_buffer_page][current_buffer_sample++] = int16_t((sample - 0.5) * 2.0f * 32767.0f);
+}
+
 // We assume that the audio data is read from an I2S buffer.
 // In a real application, this would be replaced with actual I2S receive callback.
 void audio_task(void)
@@ -398,11 +411,13 @@ void audio_task(void)
     }
     start_ms = curr_ms;
 
+    /*
     for (uint32_t sample = 0; sample < buffer_samples; sample++)
     {
         float samp = sineOsc.sample();
         i2s_buffer[current_buffer_page][sample] = int16_t(samp * 32767.0f);
     }
+        */
 
     auto written = tud_audio_write((const void*)&i2s_buffer[current_buffer_page][0], uint16_t(buffer_samples * sizeof(int16_t)));
     written >>= 1;
@@ -413,6 +428,12 @@ void audio_task(void)
 
     auto next_buffer_page = (current_buffer_page + 1) % num_buffer_pages;
     current_buffer_page = next_buffer_page;
+
+    if (current_buffer_sample > buffer_samples)
+    {
+        LOG(DBG, "CurrentBuffer Sample: " << current_buffer_sample);
+    }
+    current_buffer_sample = 0;
 }
 
 } // namespace MPico

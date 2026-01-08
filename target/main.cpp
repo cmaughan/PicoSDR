@@ -6,18 +6,20 @@
 #include <mosc/mosc.h>
 #include <musb/musb.h>
 #include <musb/musb_vendor.h>
+#include <musb/musb_audio.h>
 
 #include <zest/logger/logger.h>
 
 #include <pico_zest/time/pico_profiler.h>
 
 #include <hardware/clocks.h>
+#include <hardware/adc.h>
 
 // Use the namespace for convenience
 using namespace MPico;
 using namespace Zest;
 
-uint64_t frequency = 7000000;
+uint64_t frequency = 7030000;
 #define I2C1_DATA 2
 #define I2C1_CLOCK 3
 
@@ -63,12 +65,23 @@ int main()
     m_osc_init();
     m_osc_set_frequency(frequency, ClockOutput::CLOCK_0);
 
+#define ADC_NUM 0
+#define ADC_PIN (26 + ADC_NUM)
+#define ADC_VREF 3.3
+#define ADC_RANGE (1 << 12)
+#define ADC_CONVERT (ADC_VREF / (ADC_RANGE - 1))
+    adc_init();
+    adc_gpio_init( ADC_PIN);
+    adc_select_input( ADC_NUM);
+
     // Update loop
     while (1)
     {
         Profiler::NewFrame();
 
         PROFILE_SCOPE(main_loop);
+
+        audio_add_sample(adc_read() * ADC_CONVERT);
 
         m_usb_update();
 
