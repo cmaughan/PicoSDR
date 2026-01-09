@@ -12,11 +12,10 @@
 #include <zest/logger/logger.h>
 
 #include <mled/mled.h>
-#include <musb/tusb_config.h>
+
+#include <musb/musb_audio.h>
 
 using namespace Zest;
-
-#define AUDIO_SAMPLE_RATE CFG_TUD_AUDIO_FUNC_1_SAMPLE_RATE
 
 // Audio controls
 // Current states
@@ -387,7 +386,7 @@ void audio_add_sample(float sample)
         current_buffer_sample++;
         return; // buffer full
     } 
-    i2s_buffer[current_buffer_page][current_buffer_sample++] = int16_t((sample - 0.5) * 2.0f * 32767.0f);
+    i2s_buffer[current_buffer_page][current_buffer_sample++] = int16_t(sample * 32767.0f);
 }
 
 // We assume that the audio data is read from an I2S buffer.
@@ -431,7 +430,7 @@ void audio_task(void)
 
     if (current_buffer_sample > buffer_samples)
     {
-        LOG(DBG, "CurrentBuffer Sample: " << current_buffer_sample);
+        LOG(DBG, "Left Samples: " << (current_buffer_sample - buffer_samples));
     }
     current_buffer_sample = 0;
 }

@@ -33,7 +33,7 @@ namespace
 std::atomic<bool> playingNote = false;
 std::atomic<bool> playNote = false;
 
-int radioFrequency = 440;
+int radioFrequency = 7030000;
 bool sendFrequency = false;
 libremidi::midi_out midiTarget;
 
@@ -421,12 +421,18 @@ void demo_draw()
                 playNote = true;
             }
 
-            if (ImGui::InputInt("Frequency", &radioFrequency))
+            auto oldF = radioFrequency;
+            if (ImGui::SliderInt("Frequency", &radioFrequency, 7000000, 7200000))
             {
-                if (radioFrequency < 20)
-                    radioFrequency = 20;
-                if (radioFrequency > 20000)
-                    radioFrequency = 20000;
+                if (radioFrequency < 7000000)
+                    radioFrequency = 7000000;
+                if (radioFrequency > 7200000)
+                    radioFrequency = 7200000;
+
+                if (oldF != radioFrequency)
+                {
+                    demo_send_frequency();
+                }
             }
 
             if (ImGui::Button("Update Frequency"))

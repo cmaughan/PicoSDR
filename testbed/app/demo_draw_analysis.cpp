@@ -47,13 +47,14 @@ void demo_draw_analysis()
 
             if (!spectrumBuckets.empty())
             {
-                ImVec2 plotSize(800, 120);
                 if (i == 0)
                 {
-                    ImGui::PlotLines(std::format("Spectrum: {}", audio_to_channel_name(Id)).c_str(), &spectrumBuckets[0], static_cast<int>(spectrumBuckets.size() / 2.5), 0, NULL, 0.0f, 1.0f, plotSize);
+                    ImVec2 plotSize(spectrumBuckets.size() / 2, 120);
+                    ImGui::PlotLines(std::format("Spectrum: {}", audio_to_channel_name(Id)).c_str(), &spectrumBuckets[0], static_cast<int>(spectrumBuckets.size()), 0, NULL, 0.0f, 1.0f, plotSize);
                 }
                 else
                 {
+                    ImVec2 plotSize(audio.size() / 4, 120);
                     ImGui::PlotLines(std::format("Audio: {}", audio_to_channel_name(Id)).c_str(), &audio[0], static_cast<int>(audio.size()), 0, NULL, -1.0f, 1.0f, plotSize);
                 }
             }

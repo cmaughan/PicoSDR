@@ -1,6 +1,7 @@
 
 #include <bsp/board_api.h>
 #include <musb/tusb_config.h>
+#include <mosc/mosc.h>
 #include <tusb.h>
 
 #include <pico/stdlib.h>
@@ -117,9 +118,9 @@ void midi_read_command()
         } 
 
         // Temporary hack to test received message
-        if (val < 20000 && val > 0)
+        if (val <= 7300000 && val > 7000000)
         {
-            audio_set_frequency(val);
+            m_osc_set_frequency(val, ClockOutput::CLOCK_0);
         }
         midi_input_buffer.clear();
     }
