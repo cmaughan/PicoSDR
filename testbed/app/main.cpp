@@ -24,6 +24,7 @@
 
 #include <libusb/libusb/libusb.h>
 
+#include <implot.h>
 
 namespace fs = std::filesystem;
 // This example doesn't compile with Emscripten yet! Awaiting SDL3 support.
@@ -498,6 +499,8 @@ int main(int, char**)
     (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;  // Enable Gamepad Controls
+
+    ImPlot::CreateContext();
 
     // Setup Dear ImGui style
     ImGui::StyleColorsDark();
