@@ -271,14 +271,14 @@ void send_u32_sysex(libremidi::midi_out& midi, uint32_t value)
     // F0 <manufacturer id> <payload...> F7
     // We'll use a fake educational manufacturer ID: 0x7D (non-commercial)
 
-    std::vector<uint8_t> sysex {
-        0xF0,        // SysEx start
-        0x7D         // Educational / non-commercial manufacturer ID
+    std::vector<uint8_t> sysex{
+        0xF0, // SysEx start
+        0x7D  // Educational / non-commercial manufacturer ID
     };
 
     // Pack 32-bit value into 7-bit-safe chunks
-    sysex.push_back((value >>  0) & 0x7F);
-    sysex.push_back((value >>  7) & 0x7F);
+    sysex.push_back((value >> 0) & 0x7F);
+    sysex.push_back((value >> 7) & 0x7F);
     sysex.push_back((value >> 14) & 0x7F);
     sysex.push_back((value >> 21) & 0x7F);
     sysex.push_back((value >> 28) & 0x0F); // only 4 bits left
@@ -306,10 +306,7 @@ void demo_init_midi_target()
             midiTarget = std::move(midi);
             return;
         }
-
     }
-
-
 }
 
 void demo_init()
@@ -422,8 +419,7 @@ void demo_draw()
             }
 
             auto oldF = radioFrequency;
-            if (ImGui::SliderInt("Frequency", &radioFrequency, 7000000, 7200000))
-            {
+            auto updateRF = [&]() {
                 if (radioFrequency < 7000000)
                     radioFrequency = 7000000;
                 if (radioFrequency > 7200000)
@@ -433,6 +429,32 @@ void demo_draw()
                 {
                     demo_send_frequency();
                 }
+            };
+            if (ImGui::SliderInt("Frequency", &radioFrequency, 7000000, 7200000))
+            {
+                updateRF();
+            }
+            if (ImGui::Button("10-"))
+            {
+                radioFrequency -= 10;
+                updateRF();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("10+"))
+            {
+                radioFrequency += 10;
+                updateRF();
+            }
+            if (ImGui::Button("-"))
+            {
+                radioFrequency -= 1;
+                updateRF();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("+"))
+            {
+                radioFrequency += 1;
+                updateRF();
             }
 
             if (ImGui::Button("Update Frequency"))
