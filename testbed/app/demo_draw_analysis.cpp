@@ -1,3 +1,4 @@
+
 #include "demo.h"
 #include "pch.h"
 
@@ -9,6 +10,8 @@
 
 #include <zing/audio/audio.h>
 
+#include <implot.h>
+
 using namespace Zing;
 using namespace Zest;
 using namespace std::chrono;
@@ -19,8 +22,8 @@ void demo_draw_analysis()
     PROFILE_SCOPE(demo_draw_analysis)
     auto& ctx = GetAudioContext();
 
-    const size_t bufferWidth = 512;   // default width if no data
-    const auto BufferTypes = 2; // Spectrum + Audio
+    const size_t bufferWidth = 512; // default width if no data
+    const auto BufferTypes = 2;     // Spectrum + Audio
     const auto BufferHeight = ctx.analysisChannels.size() * BufferTypes;
 
     for (uint32_t i = 0; i < 2; i++)
@@ -49,13 +52,43 @@ void demo_draw_analysis()
             {
                 if (i == 0)
                 {
-                    ImVec2 plotSize(spectrumBuckets.size() / 2, 120);
-                    ImGui::PlotLines(std::format("Spectrum: {}", audio_to_channel_name(Id)).c_str(), &spectrumBuckets[0], static_cast<int>(spectrumBuckets.size()), 0, NULL, 0.0f, 1.0f, plotSize);
+                    auto bucketCount = spectrumBuckets.size() / 2;
+                    auto sampleCount = ctx.audioDeviceSettings.sampleRate / 2;
+                    sampleCount /= uint32_t(spectrumBuckets.size());
+
+                    static std::vector<float> xs1;
+                    xs1.resize(bucketCount);
+                    for (int i = 0; i < bucketCount; ++i)
+                    {
+                        xs1[i] = float(i * sampleCount);
+                    }
+
+                    if (ImPlot::BeginPlot(std::format("Spectrum: {}", audio_to_channel_name(Id)).c_str(), ImVec2(-1, 0), ImPlotFlags_Crosshairs | ImPlotFlags_NoLegend))
+                    {
+                        ImPlot::SetupAxes("Freq", "Level", ImPlotAxisFlags_Lock);
+                        ImPlot::SetupAxisLimits(ImAxis_X1, 0.0f, float(bucketCount * sampleCount), ImPlotCond_Always);
+                        ImPlot::SetupAxisLimits(ImAxis_Y1, 0.0f, 1.0f, ImPlotCond_Always);
+                        ImPlot::PlotLine("Level/Freq", xs1.data(), spectrumBuckets.data(), int(bucketCount));
+                        ImPlot::EndPlot();
+                    }
                 }
                 else
                 {
-                    ImVec2 plotSize(audio.size() / 4, 120);
-                    ImGui::PlotLines(std::format("Audio: {}", audio_to_channel_name(Id)).c_str(), &audio[0], static_cast<int>(audio.size()), 0, NULL, -1.0f, 1.0f, plotSize);
+                    static std::vector<float> xs1;
+                    xs1.resize(audio.size());
+                    for (int i = 0; i < audio.size(); ++i)
+                    {
+                        xs1[i] = float(i);
+                    }
+
+                    if (ImPlot::BeginPlot(std::format("Audio: {}", audio_to_channel_name(Id)).c_str(), ImVec2(-1, 0), ImPlotFlags_Crosshairs | ImPlotFlags_NoLegend))
+                    {
+                        ImPlot::SetupAxes("Sample", "Level", ImPlotAxisFlags_Lock);
+                        ImPlot::SetupAxisLimits(ImAxis_X1, 0.0f, float(audio.size()), ImPlotCond_Always);
+                        ImPlot::SetupAxisLimits(ImAxis_Y1, -1.0f, 1.0f, ImPlotCond_Always);
+                        ImPlot::PlotLine("Sample", xs1.data(), audio.data(), int(audio.size()));
+                        ImPlot::EndPlot();
+                    }
                 }
             }
         }

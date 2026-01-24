@@ -21,6 +21,8 @@
 #include <zest/file/serializer.h>
 #include <zest/time/profiler_data.h>
 
+#include <implot.h>
+
 using namespace Zing;
 using namespace Zest;
 using namespace std::chrono;
@@ -377,6 +379,7 @@ void demo_draw()
     if (showDemoWindow)
     {
         ImGui::ShowDemoWindow(&showDemoWindow);
+        ImPlot::ShowDemoWindow();
     }
 
     // Settings
