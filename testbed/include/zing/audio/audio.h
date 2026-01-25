@@ -118,7 +118,7 @@ struct AudioAnalysis
     ChannelId thisChannel;
 
     std::vector<float> inputCache;
-    uint32_t maxInputSize = 44000 * 4 * 10;
+    uint32_t maxInputSize = 48000 * 10;
     fs::path inputDumpPath;
 
     uint32_t outputSamples = 0; // The FFT output frames
@@ -223,7 +223,6 @@ struct AudioContext
 
     std::vector<float> inputStreamOverride;
     uint32_t inputStreamIndex = 0;
-    uint64_t inputStreamLastTime = 0;
 };
 
 AudioContext& GetAudioContext();

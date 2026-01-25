@@ -75,10 +75,8 @@ void audio_retire_bundle(std::shared_ptr<AudioBundle>& pBundle)
     audioContext.spareBundles.enqueue(pBundle);
 }
 
-
 void audio_start_playing()
 {
-
 }
 
 void audio_pre_callback(const std::chrono::microseconds hostTime, void* pOutput, uint32_t frameCount)
@@ -237,29 +235,12 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
 
         if (inputBuffer && !ctx.inputStreamOverride.empty())
         {
-            if (ctx.inputStreamLastTime == 0)
+            if ((ctx.inputStreamIndex + nBufferFrames) > ctx.inputStreamOverride.size())
             {
-                ctx.inputStreamLastTime = duration_cast<milliseconds>(timer_get_elapsed(ctx.m_masterClock)).count();
+                ctx.inputStreamIndex = 0;
             }
-            else
-            {
-                auto currentTime = duration_cast<milliseconds>(timer_get_elapsed(ctx.m_masterClock)).count();
-                auto deltaTimeMs = currentTime - ctx.inputStreamLastTime;
-                auto framesToAdvance = uint32_t((deltaTimeMs / 1000.0) * 48000);
-
-                if (framesToAdvance < ctx.inputStreamOverride.size() && framesToAdvance >= nBufferFrames)
-                {
-                    if ((ctx.inputStreamIndex + nBufferFrames) >= ctx.inputStreamOverride.size())
-                    {
-                        // Loop
-                        ctx.inputStreamIndex = 0;
-                    }
-                    inputBuffer = &ctx.inputStreamOverride[ctx.inputStreamIndex];
-                    ctx.inputStreamIndex += nBufferFrames;
-                    ctx.inputStreamLastTime = currentTime;
-                }
-
-            }
+            inputBuffer = &ctx.inputStreamOverride[ctx.inputStreamIndex];
+            ctx.inputStreamIndex += nBufferFrames;
         }
 
         if (ctx.m_isPlaying)
@@ -839,7 +820,7 @@ void audio_show_settings_gui()
         // Use ImGui to open a file dialog
         // Launch the dialog and ask for a path:
 
-        char const* lFilterPatterns[1] = { "*.sdr" };
+        char const* lFilterPatterns[1] = {"*.sdr"};
         auto pTarget = tinyfd_saveFileDialog("Save Input As", "c:/cw.sdr", 1, lFilterPatterns, "SDR CW Files");
         if (pTarget != nullptr)
         {
@@ -859,16 +840,15 @@ void audio_show_settings_gui()
         // Use ImGui to open a file dialog
         // Launch the dialog and ask for a path:
 
-        char const* lFilterPatterns[1] = { "*.sdr" };
+        char const* lFilterPatterns[1] = {"*.sdr"};
         auto pTarget = tinyfd_openFileDialog("Open Input", "c:/cw.sdr", 1, lFilterPatterns, "SDR CW Files", false);
         if (pTarget != nullptr)
         {
             // Load the file into a vector<float> buffer
             auto filePath = fs::path(pTarget);
             auto input = file_read(filePath);
-            ctx.inputStreamOverride.resize(input.size());
+            ctx.inputStreamOverride.resize(input.size() / 4);
             ctx.inputStreamIndex = 0;
-            ctx.inputStreamLastTime = 0;
             memcpy(ctx.inputStreamOverride.data(), input.data(), input.size());
         }
     }
