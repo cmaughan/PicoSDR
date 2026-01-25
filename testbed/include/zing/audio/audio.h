@@ -220,6 +220,10 @@ struct AudioContext
     std::vector<fnMidiBroadcast> midiClients;
 
     Zest::spin_mutex audioTickEnableMutex;
+
+    std::vector<float> inputStreamOverride;
+    uint32_t inputStreamIndex = 0;
+    uint64_t inputStreamLastTime = 0;
 };
 
 AudioContext& GetAudioContext();
