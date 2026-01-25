@@ -14,6 +14,8 @@
 //#define LIBREMIDI_HEADER_ONLY
 #include <libremidi/libremidi.hpp>
 
+#include <tinyfiledialogs/tinyfiledialogs.h>
+
 using namespace std::chrono;
 //using namespace ableton;
 using namespace Zest;
@@ -217,7 +219,7 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
                 // Copy the audio data into a processing bundle and add it to the queue
                 auto pBundle = audio_get_bundle();
                 pBundle->data.resize(nBufferFrames);
-                pBundle->channel = Id.second;
+                pBundle->channel = Id;
 
                 // Copy with stride
                 auto stride = state.channelCount;
@@ -803,6 +805,26 @@ void audio_show_settings_gui()
     if (ImGui::Checkbox("Enable Input", &audioContext.audioDeviceSettings.enableInput))
     {
         ctx.m_changedDeviceCombo = true;
+    }
+
+    if (ImGui::Button("Save Input"))
+    {
+        // Use ImGui to open a file dialog
+        // Launch the dialog and ask for a path:
+
+        char const* lFilterPatterns[1] = { "*.sdr" };
+        auto pTarget = tinyfd_saveFileDialog("Save Input As", "c:/cw.sdr", 1, lFilterPatterns, "SDR CW Files");
+        if (pTarget != nullptr)
+        {
+            for (auto& [ch, pAnalysis] : ctx.analysisChannels)
+            {
+                if (ch.first == Channel_In)
+                {
+                    pAnalysis->inputDumpPath = fs::path(pTarget);
+                    break;
+                }
+            }
+        }
     }
 
     if (ImGui::Checkbox("Enable Output", &audioContext.audioDeviceSettings.enableOutput))

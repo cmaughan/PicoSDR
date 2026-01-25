@@ -22,7 +22,6 @@ project(PicoSDR-Root
     LANGUAGES CXX C
     VERSION 0.5.0
 )
-
 find_package(concurrentqueue CONFIG REQUIRED)
 find_package(portaudio CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)

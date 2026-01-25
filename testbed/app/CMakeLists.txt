@@ -13,6 +13,7 @@ list(INSERT CMAKE_MODULE_PATH 0 ${CMAKE_CURRENT_LIST_DIR}/cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/demo_common.cmake)
 
 find_package(Vulkan REQUIRED)
+find_package(tinyfiledialogs CONFIG REQUIRED)
 
 
 set(TESTBED_APP_SOURCE
@@ -50,6 +51,7 @@ PRIVATE
     Zing::Zing
     usb-1.0
     Vulkan::Vulkan
+    tinyfiledialogs::tinyfiledialogs
     ${PLATFORM_LINKLIBS}
     )
 
