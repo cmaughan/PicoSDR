@@ -33,9 +33,14 @@ union SDL_Event;
 namespace Zing
 {
 
+// Channel_In/Out/?, count
+using ChannelId = std::pair<uint32_t, uint32_t>;
+constexpr uint32_t Channel_Out = 0;
+constexpr uint32_t Channel_In = 1;
+
 struct AudioBundle
 {
-    uint32_t channel;
+    ChannelId channel;
     std::vector<float> data;
 };
 
@@ -65,9 +70,6 @@ struct ApiInfo
     std::vector<std::string> inDeviceNames;
     std::map<uint32_t, std::vector<uint32_t>> inSampleRates;
 };
-
-constexpr uint32_t Channel_Out = 0;
-constexpr uint32_t Channel_In = 1;
 
 struct AudioChannelState
 {
@@ -114,6 +116,10 @@ struct AudioAnalysis
 
     AudioChannelState channel;
     ChannelId thisChannel;
+
+    std::vector<float> inputCache;
+    uint32_t maxInputSize = 48000 * 10;
+    fs::path inputDumpPath;
 
     uint32_t outputSamples = 0; // The FFT output frames
 
@@ -214,6 +220,9 @@ struct AudioContext
     std::vector<fnMidiBroadcast> midiClients;
 
     Zest::spin_mutex audioTickEnableMutex;
+
+    std::vector<float> inputStreamOverride;
+    uint32_t inputStreamIndex = 0;
 };
 
 AudioContext& GetAudioContext();

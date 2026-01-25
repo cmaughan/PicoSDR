@@ -14,6 +14,8 @@
 //#define LIBREMIDI_HEADER_ONLY
 #include <libremidi/libremidi.hpp>
 
+#include <tinyfiledialogs/tinyfiledialogs.h>
+
 using namespace std::chrono;
 //using namespace ableton;
 using namespace Zest;
@@ -73,10 +75,8 @@ void audio_retire_bundle(std::shared_ptr<AudioBundle>& pBundle)
     audioContext.spareBundles.enqueue(pBundle);
 }
 
-
 void audio_start_playing()
 {
-
 }
 
 void audio_pre_callback(const std::chrono::microseconds hostTime, void* pOutput, uint32_t frameCount)
@@ -217,7 +217,7 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
                 // Copy the audio data into a processing bundle and add it to the queue
                 auto pBundle = audio_get_bundle();
                 pBundle->data.resize(nBufferFrames);
-                pBundle->channel = Id.second;
+                pBundle->channel = Id;
 
                 // Copy with stride
                 auto stride = state.channelCount;
@@ -232,6 +232,16 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
                 itrAnalysis->second->processBundles.enqueue(pBundle);
             }
         };
+
+        if (inputBuffer && !ctx.inputStreamOverride.empty())
+        {
+            if ((ctx.inputStreamIndex + nBufferFrames) > ctx.inputStreamOverride.size())
+            {
+                ctx.inputStreamIndex = 0;
+            }
+            inputBuffer = &ctx.inputStreamOverride[ctx.inputStreamIndex];
+            ctx.inputStreamIndex += nBufferFrames;
+        }
 
         if (ctx.m_isPlaying)
         {
@@ -803,6 +813,44 @@ void audio_show_settings_gui()
     if (ImGui::Checkbox("Enable Input", &audioContext.audioDeviceSettings.enableInput))
     {
         ctx.m_changedDeviceCombo = true;
+    }
+
+    if (ImGui::Button("Save Input"))
+    {
+        // Use ImGui to open a file dialog
+        // Launch the dialog and ask for a path:
+
+        char const* lFilterPatterns[1] = {"*.sdr"};
+        auto pTarget = tinyfd_saveFileDialog("Save Input As", "c:/cw.sdr", 1, lFilterPatterns, "SDR CW Files");
+        if (pTarget != nullptr)
+        {
+            for (auto& [ch, pAnalysis] : ctx.analysisChannels)
+            {
+                if (ch.first == Channel_In)
+                {
+                    pAnalysis->inputDumpPath = fs::path(pTarget);
+                    break;
+                }
+            }
+        }
+    }
+
+    if (ImGui::Button("Load Input"))
+    {
+        // Use ImGui to open a file dialog
+        // Launch the dialog and ask for a path:
+
+        char const* lFilterPatterns[1] = {"*.sdr"};
+        auto pTarget = tinyfd_openFileDialog("Open Input", "c:/cw.sdr", 1, lFilterPatterns, "SDR CW Files", false);
+        if (pTarget != nullptr)
+        {
+            // Load the file into a vector<float> buffer
+            auto filePath = fs::path(pTarget);
+            auto input = file_read(filePath);
+            ctx.inputStreamOverride.resize(input.size() / 4);
+            ctx.inputStreamIndex = 0;
+            memcpy(ctx.inputStreamOverride.data(), input.data(), input.size());
+        }
     }
 
     if (ImGui::Checkbox("Enable Output", &audioContext.audioDeviceSettings.enableOutput))

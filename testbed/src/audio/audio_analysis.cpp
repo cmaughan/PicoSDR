@@ -126,6 +126,27 @@ bool audio_analysis_start(AudioAnalysis& analysis, const AudioChannelState& stat
                 continue;
             }
 
+            if (!pAnalysis->inputDumpPath.empty())
+            {
+                if (spData->channel.first == Channel_In && pAnalysis->inputCache.size() < pAnalysis->maxInputSize)
+                {
+                    pAnalysis->inputCache.insert(pAnalysis->inputCache.end(), spData->data.begin(), spData->data.end());
+                }
+
+                // Finished
+                if (pAnalysis->inputCache.size() >= pAnalysis->maxInputSize)
+                {
+                    // Dump to file
+                    fs::create_directories(pAnalysis->inputDumpPath.parent_path());
+                    std::ofstream outFile(pAnalysis->inputDumpPath, std::ios::binary);
+                    outFile.write((const char*)pAnalysis->inputCache.data(), pAnalysis->inputCache.size() * sizeof(float));
+                    outFile.close();
+                    //ZEST_LOG_INFO("Audio analysis dumped input to {}", pAnalysis->inputDumpPath.string());
+                    pAnalysis->inputCache.clear();
+                    pAnalysis->inputDumpPath.clear();
+                }
+            }
+
             audio_analysis_update(*pAnalysis, *spData);
 
             audio_retire_bundle(spData);
