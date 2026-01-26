@@ -86,13 +86,6 @@ void demo_draw_analysis()
                         ImPlot::EndPlot();
                     }
 
-                    /*
-                    ImGui::SliderFloat("WF Range (dB)", &wf.dynRangeDb, 1.0f, 150.0f);
-                    ImGui::SliderFloat("WF Adapt", &wf.noiseAlpha, 0.0f, 0.30f);
-                    ImGui::SliderInt("WF Speed (spectra/row)", &wf.accumulateN, 1, 64);
-                    ImGui::SliderFloat("WF Offset (dB)", &wf.noiseOffsetDb, -100.0f, 0.0f);
-                    */
-
                     if (wf.bins != bucketCount)
                     {
                         Waterfall_Init(wf, int(bucketCount), 50);
