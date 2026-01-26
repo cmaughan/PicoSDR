@@ -86,19 +86,22 @@ void demo_draw_analysis()
                         ImPlot::EndPlot();
                     }
 
-                    ImGui::SliderFloat("WF Range (dB)", &wf.dynRangeDb, 1.0f, 100.0f);
+                    /*
+                    ImGui::SliderFloat("WF Range (dB)", &wf.dynRangeDb, 1.0f, 150.0f);
                     ImGui::SliderFloat("WF Adapt", &wf.noiseAlpha, 0.0f, 0.30f);
                     ImGui::SliderInt("WF Speed (spectra/row)", &wf.accumulateN, 1, 64);
-                    ImGui::SliderFloat("WF Offset (dB)", &wf.noiseOffsetDb, -40.0f, 40.0f);
+                    ImGui::SliderFloat("WF Offset (dB)", &wf.noiseOffsetDb, -100.0f, 0.0f);
+                    */
 
                     if (wf.bins != bucketCount)
                     {
                         Waterfall_Init(wf, int(bucketCount), 50);
                     }
 
-                    Waterfall_AccumulateLinePower(wf, spectrumBuckets.data(), int(bucketCount));
+                    Waterfall_AccumulateMag(wf, spectrumBuckets.data(), int(bucketCount));
 
-                    Waterfall_DrawImPlot(wf, "Waterfall", float(bucketCount * sampleCount), ImVec2(-1, 600));
+                    Waterfall_DrawControls(wf);
+                    Waterfall_DrawPlot(wf, "Waterfall", float(bucketCount * sampleCount), ImVec2(-1, 600));
                 }
                 else
                 {

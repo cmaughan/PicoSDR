@@ -5,38 +5,74 @@
 #include <cmath>
 #include <cstring>
 
+// You said you're using ImGui/ImPlot.
 #include <imgui.h>
 #include <implot.h>
 
-namespace
-{
-inline float ToDb_FromPower(float p)
-{
-    constexpr float eps = 1e-20f; // power can be very small
+namespace {
+
+inline float ToDb_FromPower(float p) {
+    // power can be tiny
+    constexpr float eps = 1e-20f;
     return 10.0f * std::log10(std::max(p, eps));
 }
-} //namespace
 
-void Waterfall_Init(Waterfall& wf, int bins, int rows)
-{
+inline float Clamp(float v, float lo, float hi) {
+    return std::max(lo, std::min(hi, v));
+}
+
+// Estimate noise floor from a dB line: mean of bottom 20% bins.
+// IMPORTANT: must not scramble the stored line.
+float EstimateNoiseDb_BottomMean(const float* lineDb, int bins) {
+    static thread_local std::vector<float> work;
+    work.assign(lineDb, lineDb + bins);
+
+    const int k = std::max(1, bins / 5);
+    std::nth_element(work.begin(), work.begin() + k, work.end());
+
+    float sum = 0.0f;
+    for (int i = 0; i < k; ++i) sum += work[i];
+    return sum / float(k);
+}
+
+// Push a fully-formed dB line into the ring buffer, and update emaNoiseDb if not locked/manual.
+void PushLineDb(Waterfall& wf, const float* lineDb) {
+    // Update auto noise estimate unless user says "nope"
+    if (!wf.manualFloor && !wf.lockNoiseFloor) {
+        const float noiseNow = EstimateNoiseDb_BottomMean(lineDb, wf.bins);
+        const float a = Clamp(wf.adapt, 0.0f, 1.0f);
+        wf.emaNoiseDb = (1.0f - a) * wf.emaNoiseDb + a * noiseNow;
+    }
+
+    // Store ordered line
+    float* dst = wf.ringDb.data() + size_t(wf.head) * size_t(wf.bins);
+    std::memcpy(dst, lineDb, size_t(wf.bins) * sizeof(float));
+
+    wf.head = (wf.head + 1) % wf.rows;
+}
+
+} // namespace
+
+void Waterfall_Init(Waterfall& wf, int bins, int rows) {
     wf.bins = std::max(0, bins);
     wf.rows = std::max(1, rows);
     wf.head = 0;
 
     wf.emaNoiseDb = -90.0f;
+    wf.lockedNoiseDb = wf.emaNoiseDb;
 
-    wf.ringDb.assign((size_t)wf.rows * (size_t)wf.bins, -120.0f);
+    wf.ringDb.assign(size_t(wf.rows) * size_t(wf.bins), -120.0f);
     wf.uploadDb.assign(wf.ringDb.size(), -120.0f);
 
     wf.accumulateN = std::max(1, wf.accumulateN);
     wf.accCount = 0;
-    wf.accPowerSum.assign((size_t)wf.bins, 0.0f);
+    wf.accPowerSum.assign(size_t(wf.bins), 0.0f);
 }
 
-void Waterfall_Reset(Waterfall& wf)
-{
+void Waterfall_Reset(Waterfall& wf) {
     wf.head = 0;
     wf.emaNoiseDb = -90.0f;
+    wf.lockedNoiseDb = wf.emaNoiseDb;
 
     std::fill(wf.ringDb.begin(), wf.ringDb.end(), -120.0f);
     std::fill(wf.uploadDb.begin(), wf.uploadDb.end(), -120.0f);
@@ -45,47 +81,19 @@ void Waterfall_Reset(Waterfall& wf)
     std::fill(wf.accPowerSum.begin(), wf.accPowerSum.end(), 0.0f);
 }
 
-static void Waterfall_PushLineDb(Waterfall& wf, const float* lineDb)
-{
-    // Estimate noise floor using bottom 20% mean WITHOUT scrambling the stored line
-    static thread_local std::vector<float> work;
-    work.assign(lineDb, lineDb + wf.bins);
-
-    int k = std::max(1, wf.bins / 5);
-    std::nth_element(work.begin(), work.begin() + k, work.end());
-
-    float sum = 0.0f;
-    for (int i = 0; i < k; ++i)
-        sum += work[i];
-    float noiseNow = sum / (float)k;
-
-    wf.emaNoiseDb = (1.0f - wf.noiseAlpha) * wf.emaNoiseDb + wf.noiseAlpha * noiseNow;
-
-    float* dst = wf.ringDb.data() + (size_t)wf.head * (size_t)wf.bins;
-    std::memcpy(dst, lineDb, (size_t)wf.bins * sizeof(float));
-
-    wf.head = (wf.head + 1) % wf.rows;
-}
-
-void Waterfall_AccumulateLinePower(Waterfall& wf, const float* spectrumMag, int spectrumCount)
-{
-    if (!wf.enabled)
-        return;
-    if (wf.bins <= 0 || wf.rows <= 0)
-        return;
-    if (!spectrumMag)
-        return;
-    if (spectrumCount < wf.bins)
-        return;
+void Waterfall_AccumulateMag(Waterfall& wf, const float* spectrumMag, int spectrumCount) {
+    if (!wf.enabled) return;
+    if (wf.bins <= 0 || wf.rows <= 0) return;
+    if (!spectrumMag) return;
+    if (spectrumCount < wf.bins) return;
 
     wf.accumulateN = std::max(1, wf.accumulateN);
     if ((int)wf.accPowerSum.size() != wf.bins)
-        wf.accPowerSum.assign((size_t)wf.bins, 0.0f);
+        wf.accPowerSum.assign(size_t(wf.bins), 0.0f);
 
-    // Accumulate POWER = mag^2
-    for (int i = 0; i < wf.bins; ++i)
-    {
-        float m = spectrumMag[i];
+    // accumulate POWER = mag^2
+    for (int i = 0; i < wf.bins; ++i) {
+        const float m = spectrumMag[i];
         wf.accPowerSum[i] += m * m;
     }
 
@@ -93,122 +101,118 @@ void Waterfall_AccumulateLinePower(Waterfall& wf, const float* spectrumMag, int 
     if (wf.accCount < wf.accumulateN)
         return;
 
-    // Average power, convert to dB(power)
+    // Average power -> dB(power)
     static thread_local std::vector<float> lineDb;
-    lineDb.resize((size_t)wf.bins);
+    lineDb.resize(size_t(wf.bins));
 
-    float invN = 1.0f / (float)wf.accCount;
-    for (int i = 0; i < wf.bins; ++i)
-    {
-        float pAvg = wf.accPowerSum[i] * invN;
+    const float invN = 1.0f / float(wf.accCount);
+    for (int i = 0; i < wf.bins; ++i) {
+        const float pAvg = wf.accPowerSum[i] * invN;
         lineDb[i] = ToDb_FromPower(pAvg);
     }
 
-    // Reset accumulator
+    // reset accumulator
     std::fill(wf.accPowerSum.begin(), wf.accPowerSum.end(), 0.0f);
     wf.accCount = 0;
 
-    // Store the dB line
-    Waterfall_PushLineDb(wf, lineDb.data());
+    // commit
+    PushLineDb(wf, lineDb.data());
 }
 
-void Waterfall_AccumulateLineAlreadyPower(Waterfall& wf, const float* spectrumPower, int spectrumCount)
-{
-    if (!wf.enabled)
-        return;
-    if (wf.bins <= 0 || wf.rows <= 0)
-        return;
-    if (!spectrumPower)
-        return;
-    if (spectrumCount < wf.bins)
-        return;
-
-    wf.accumulateN = std::max(1, wf.accumulateN);
-    if ((int)wf.accPowerSum.size() != wf.bins)
-        wf.accPowerSum.assign((size_t)wf.bins, 0.0f);
-
-    // Accumulate power directly
-    for (int i = 0; i < wf.bins; ++i)
-        wf.accPowerSum[i] += spectrumPower[i];
-
-    wf.accCount++;
-    if (wf.accCount < wf.accumulateN)
-        return;
-
-    static thread_local std::vector<float> lineDb;
-    lineDb.resize((size_t)wf.bins);
-
-    float invN = 1.0f / (float)wf.accCount;
-    for (int i = 0; i < wf.bins; ++i)
-    {
-        float pAvg = wf.accPowerSum[i] * invN;
-        lineDb[i] = ToDb_FromPower(pAvg);
-    }
-
-    std::fill(wf.accPowerSum.begin(), wf.accPowerSum.end(), 0.0f);
-    wf.accCount = 0;
-
-    Waterfall_PushLineDb(wf, lineDb.data());
-}
-
-void Waterfall_BuildUpload(Waterfall& wf)
-{
-    if (wf.bins <= 0 || wf.rows <= 0)
-        return;
+void Waterfall_BuildUpload(Waterfall& wf) {
+    if (wf.bins <= 0 || wf.rows <= 0) return;
     if (wf.uploadDb.size() != wf.ringDb.size())
         wf.uploadDb.resize(wf.ringDb.size());
 
-    for (int y = 0; y < wf.rows; ++y)
-    {
-        int ringRow = (wf.head + y) % wf.rows; // oldest at top
-        const float* src = wf.ringDb.data() + (size_t)ringRow * (size_t)wf.bins;
-        float* dst = wf.uploadDb.data() + (size_t)y * (size_t)wf.bins;
-        std::memcpy(dst, src, (size_t)wf.bins * sizeof(float));
+    // Oldest row is wf.head (next to be overwritten). Oldest at top.
+    for (int y = 0; y < wf.rows; ++y) {
+        const int ringRow = (wf.head + y) % wf.rows;
+        const float* src = wf.ringDb.data() + size_t(ringRow) * size_t(wf.bins);
+        float* dst = wf.uploadDb.data() + size_t(y) * size_t(wf.bins);
+        std::memcpy(dst, src, size_t(wf.bins) * sizeof(float));
     }
 }
 
-float Waterfall_FloorDb(const Waterfall& wf)
-{
-    return wf.emaNoiseDb + wf.noiseOffsetDb;
+float Waterfall_FloorDb(const Waterfall& wf) {
+    if (wf.manualFloor)
+        return wf.manualFloorDb;
+
+    if (wf.lockNoiseFloor)
+        return wf.lockedNoiseDb + wf.floorOffsetDb;
+
+    return wf.emaNoiseDb + wf.floorOffsetDb;
 }
 
-float Waterfall_CeilDb(const Waterfall& wf)
-{
-    return wf.emaNoiseDb + wf.dynRangeDb;
+float Waterfall_CeilDb(const Waterfall& wf) {
+    return Waterfall_FloorDb(wf) + wf.rangeDb;
 }
 
-void Waterfall_DrawImPlot(Waterfall& wf, const char* plotTitle, float maxHz, ImVec2 plotSize)
-{
-    if (wf.bins <= 0 || wf.rows <= 0)
-        return;
+void Waterfall_DrawControls(Waterfall& wf) {
+    // The “radio panel” bits
+    ImGui::Checkbox("WF Enabled", &wf.enabled);
+
+    ImGui::SliderFloat("WF Range (dB)", &wf.rangeDb, 10.0f, 90.0f, "%.1f");
+    ImGui::SliderFloat("WF Adapt", &wf.adapt, 0.001f, 0.30f, "%.3f");
+    ImGui::SliderInt("WF Speed (spectra/row)", &wf.accumulateN, 1, 64);
+
+    ImGui::Separator();
+
+    ImGui::SliderFloat("WF Offset (dB)", &wf.floorOffsetDb, -40.0f, 40.0f, "%.1f");
+
+    if (ImGui::Checkbox("WF Lock Noise", &wf.lockNoiseFloor)) {
+        if (wf.lockNoiseFloor) {
+            // lock current auto estimate as baseline
+            wf.lockedNoiseDb = wf.emaNoiseDb;
+        }
+    }
+
+    ImGui::Checkbox("WF Manual Floor", &wf.manualFloor);
+    if (wf.manualFloor) {
+        ImGui::SliderFloat("WF Floor (dB)", &wf.manualFloorDb, -160.0f, -10.0f, "%.1f");
+    }
+
+    if (ImGui::Button("WF Reset")) {
+        Waterfall_Reset(wf);
+    }
+
+    // Optional debug readout (handy while tuning)
+    ImGui::Text("AutoNoise: %.1f dB  Floor: %.1f dB  Ceil: %.1f dB",
+                wf.emaNoiseDb, Waterfall_FloorDb(wf), Waterfall_CeilDb(wf));
+}
+
+void Waterfall_DrawPlot(Waterfall& wf, const char* plotTitle, float maxHz, ImVec2 plotSize) {
+    if (!wf.enabled) return;
+    if (wf.bins <= 0 || wf.rows <= 0) return;
 
     Waterfall_BuildUpload(wf);
 
-    const double x0 = 0.0, x1 = (double)maxHz;
-    const double y0 = 0.0, y1 = (double)wf.rows;
+    const double x0 = 0.0;
+    const double x1 = (double)maxHz;
+    const double y0 = 0.0;
+    const double y1 = (double)wf.rows;
 
-    if (ImPlot::BeginPlot(plotTitle, plotSize, ImPlotFlags_NoLegend | ImPlotFlags_NoMenus | ImPlotFlags_NoMouseText))
-    {
+    if (ImPlot::BeginPlot(plotTitle, plotSize,
+        ImPlotFlags_NoLegend | ImPlotFlags_NoMenus | ImPlotFlags_NoMouseText)) {
 
         ImPlot::SetupAxes("Freq", "Time", ImPlotAxisFlags_Lock, ImPlotAxisFlags_Lock);
         ImPlot::SetupAxisLimits(ImAxis_X1, x0, x1, ImPlotCond_Always);
         ImPlot::SetupAxisLimits(ImAxis_Y1, y0, y1, ImPlotCond_Always);
 
+        // “Classic radio-ish” (widely available in older ImPlot)
         ImPlot::PushColormap(ImPlotColormap_Jet);
 
         ImPlot::PlotHeatmap(
             "##wf",
             wf.uploadDb.data(),
-            wf.rows,
-            wf.bins,
+            wf.rows, wf.bins,
             Waterfall_FloorDb(wf),
             Waterfall_CeilDb(wf),
             nullptr,
             ImPlotPoint(x0, y0),
-            ImPlotPoint(x1, y1));
+            ImPlotPoint(x1, y1)
+        );
 
         ImPlot::PopColormap();
         ImPlot::EndPlot();
     }
 }
-

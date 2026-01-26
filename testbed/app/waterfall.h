@@ -1,46 +1,64 @@
 // Waterfall.h
 #pragma once
+
 #include <vector>
+
+// Forward-declare to keep this header light.
+// Include <imgui.h> and <implot.h> in Waterfall.cpp and in any TU that calls Draw().
 struct ImVec2;
 
-struct Waterfall {
-    int   bins        = 0;
-    int   rows        = 50;
-    float noiseAlpha  = 0.08f;
-    float dynRangeDb  = 60.0f;
-    bool  enabled     = true;
+struct Waterfall
+{
+    // ---- Dimensions ----
+    int bins = 0;  // number of frequency bins displayed
+    int rows = 50; // history lines displayed
 
-    int   head        = 0;
-    float emaNoiseDb  = -90.0f;
+    // ---- Waterfall speed (time decimation) ----
+    int accumulateN = 8; // spectra per committed row
+    int accCount = 0;
+    std::vector<float> accPowerSum; // sum of POWER per bin (mag^2) across accCount
 
-    std::vector<float> ringDb;
-    std::vector<float> uploadDb;
+    // ---- Auto noise tracking ----
+    float emaNoiseDb = -90.0f; // internal auto estimate (dB)
+    float adapt = 0.08f;       // EMA alpha (0..1); higher = faster tracking
 
-    // Time accumulation
-    int   accumulateN = 8;          // spectra per row
-    int   accCount    = 0;
-    std::vector<float> accPowerSum; // bins-sized SUM OF POWER
+    // ---- User controls ----
+    float rangeDb = 50.0f;      // dynamic range shown above floor
+    float floorOffsetDb = 0.0f; // manual bias applied to auto (and locked) floor
 
-    float noiseOffsetDb = 0.0f; // manual bias
+    bool lockNoiseFloor = false;
+    float lockedNoiseDb = -90.0f;
+
+    bool manualFloor = false;
+    float manualFloorDb = -90.0f;
+
+    bool enabled = true;
+
+    // ---- Buffers (stored as dB values) ----
+    int head = 0;                // next write row (ring)
+    std::vector<float> ringDb;   // rows*bins (ring layout)
+    std::vector<float> uploadDb; // rows*bins (chronological oldest->newest for PlotHeatmap)
+
+    int noiseWindowN = 20; // how many committed rows to use
+    int noiseWinHead = 0;
+    std::vector<float> noiseWinDb; // size noiseWindowN
+    bool useMedianNoise = true;    // median vs mean
 };
 
-void  Waterfall_Init(Waterfall& wf, int bins, int rows = 50);
-void  Waterfall_Reset(Waterfall& wf);
+// Lifecycle
+void Waterfall_Init(Waterfall& wf, int bins, int rows = 50);
+void Waterfall_Reset(Waterfall& wf);
 
-void  Waterfall_BuildUpload(Waterfall& wf);
+// Feed one spectrum snapshot (magnitudes). This ACCUMULATES and commits every wf.accumulateN calls.
+void Waterfall_AccumulateMag(Waterfall& wf, const float* spectrumMag, int spectrumCount);
 
+// Build ordered buffer for drawing (oldest at top, newest at bottom)
+void Waterfall_BuildUpload(Waterfall& wf);
+
+// Scale helpers (effective display scale)
 float Waterfall_FloorDb(const Waterfall& wf);
-float Waterfall_CeilDb (const Waterfall& wf);
+float Waterfall_CeilDb(const Waterfall& wf);
 
-// Power accumulation API (call every spectrum update)
-void  Waterfall_AccumulateLinePower(Waterfall& wf, const float* spectrumMag, int spectrumCount);
-
-// Optional: if you ever already have power bins, you can call this instead.
-void  Waterfall_AccumulateLineAlreadyPower(Waterfall& wf, const float* spectrumPower, int spectrumCount);
-
-float Waterfall_FloorDb(const Waterfall& wf);
-
-void  Waterfall_DrawImPlot(Waterfall& wf,
-                           const char* plotTitle,
-                           float maxHz,
-                           ImVec2 plotSize);
+// UI + draw (ImGui + ImPlot)
+void Waterfall_DrawControls(Waterfall& wf);
+void Waterfall_DrawPlot(Waterfall& wf, const char* plotTitle, float maxHz, ImVec2 plotSize);
