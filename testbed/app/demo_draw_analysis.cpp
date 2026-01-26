@@ -12,10 +12,19 @@
 
 #include <implot.h>
 
+#include "waterfall.h"
+
 using namespace Zing;
 using namespace Zest;
 using namespace std::chrono;
 using namespace libremidi;
+
+namespace
+{
+Waterfall wf;
+
+}
+
 
 void demo_draw_analysis()
 {
@@ -30,6 +39,11 @@ void demo_draw_analysis()
     {
         for (auto [Id, pAnalysis] : ctx.analysisChannels)
         {
+            if (Id.first != Channel_In)
+            // Only show input for now
+            {
+                continue;
+            }
             std::shared_ptr<AudioAnalysisData> spNewData;
             while (pAnalysis->analysisData.try_dequeue(spNewData))
             {
@@ -71,6 +85,19 @@ void demo_draw_analysis()
                         ImPlot::PlotLine("Level/Freq", xs1.data(), spectrumBuckets.data(), int(bucketCount));
                         ImPlot::EndPlot();
                     }
+
+                    ImGui::SliderFloat("WF Range (dB)", &wf.dynRangeDb, 10.0f, 120.0f);
+                    ImGui::SliderFloat("WF Adapt", &wf.noiseAlpha, 0.01f, 0.30f);
+                    ImGui::SliderInt("WF Speed (spectra/row)", &wf.accumulateN, 1, 64);
+
+                    if (wf.bins != bucketCount)
+                    {
+                        Waterfall_Init(wf, int(bucketCount), 50);
+                    }
+
+                    Waterfall_AccumulateLine(wf, spectrumBuckets.data(), int(bucketCount));
+
+                    Waterfall_DrawImPlot(wf, "Waterfall", float(bucketCount * sampleCount), ImVec2(-1, 600));
                 }
                 else
                 {
