@@ -168,7 +168,7 @@ void audio_analysis_stop(AudioAnalysis& analysis)
 bool audio_analysis_init(AudioAnalysis& analysis, AudioAnalysisData& analysisData)
 {
     auto& ctx = GetAudioContext();
-    analysis.outputSamples = (ctx.audioAnalysisSettings.frames / 2);
+    analysis.outputSamples = (ctx.audioAnalysisSettings.frames / 2) + 1;
 
     // Hamming window
     analysis.window = audio_analysis_create_window(ctx.audioAnalysisSettings.frames);
@@ -266,7 +266,6 @@ void audio_analysis_update(AudioAnalysis& analysis, AudioBundle& bundle)
                 {
                     analysis.fftIn[i] = std::complex(0.0f, 0.0f);
                 }
-                // assert(std::isfinite(analysis.fftIn[i].real()));
             }
 
             kiss_fft(analysis.cfg, (const kiss_fft_cpx*)&analysis.fftIn[0], (kiss_fft_cpx*)&analysis.fftOut[0]);
@@ -277,7 +276,8 @@ void audio_analysis_update(AudioAnalysis& analysis, AudioBundle& bundle)
             // Convert to dB
             for (uint32_t i = 1; i < analysis.outputSamples; i++)
             {
-                analysis.fftMag[i] = std::norm(analysis.fftOut[i]) / (ctx.audioAnalysisSettings.frames * ctx.audioAnalysisSettings.frames);
+                auto winScale = std::max(analysis.totalWin, 1e-6f);
+                analysis.fftMag[i] = std::norm(analysis.fftOut[i]) / (winScale * winScale);
             }
             analysis.fftMag[0] = 0.0f;
         }
@@ -357,9 +357,12 @@ void audio_analysis_calculate_spectrum(AudioAnalysis& analysis, AudioAnalysisDat
 
         // Magnitude * 2 because we are half the spectrum,
         // divided by the total of the hamming window to compenstate
-        // spectrum[i] = (analysis.fftMag[i] * 2.0f) / analysis.totalWin;
-        // spectrum[i] = std::max(spectrum[i], std::numeric_limits<float>::min());
         spectrum[i] = analysis.fftMag[i];
+        if (i != 0 && i != (analysis.outputSamples - 1))
+        {
+            spectrum[i] *= 2.0f;
+        }
+        spectrum[i] = std::max(spectrum[i], std::numeric_limits<float>::min());
 
         // assert(std::isfinite(spectrum[i]));
 
