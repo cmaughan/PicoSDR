@@ -216,7 +216,7 @@ float Waterfall_CeilDb(const Waterfall& wf) {
 
 void Waterfall_DrawControls(Waterfall& wf) {
     // The ?radio panel? bits
-    if (ImGui::CollapsingHeader("Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader("Settings", ImGuiTreeNodeFlags_None)) {
         ImGui::SliderFloat("WF Range (dB)", &wf.rangeDb, 10.0f, 90.0f, "%.1f");
         ImGui::SliderFloat("WF Adapt", &wf.adapt, 0.001f, 0.30f, "%.3f");
         ImGui::SliderInt("WF Speed (spectra/row)", &wf.accumulateN, 1, 64);
