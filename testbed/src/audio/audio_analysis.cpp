@@ -32,7 +32,7 @@ inline std::vector<float> audio_analysis_create_window(uint32_t size)
     std::vector<float> ret(size);
     for (uint32_t i = 0; i < size; i++)
     {
-        ret[i] = (0.5f * (1 - cos(2.0f * glm::pi<float>() * (i / (float)(size - 1)))));
+        ret[i] = (0.54f - 0.46f * cos(2.0f * glm::pi<float>() * (i / (float)(size - 1))));
     }
 
     return ret;
@@ -191,6 +191,7 @@ bool audio_analysis_init(AudioAnalysis& analysis, AudioAnalysisData& analysisDat
     return true;
 }
 
+// On thread; update
 void audio_analysis_update(AudioAnalysis& analysis, AudioBundle& bundle)
 {
     PROFILE_SCOPE(Audio_Analysis);
@@ -203,6 +204,7 @@ void audio_analysis_update(AudioAnalysis& analysis, AudioBundle& bundle)
     // frequencies if the samples didn't perfectly tile (as they won't).
     // he windowing function smooths the outer edges to remove this transition and give more accurate results.
 
+    // Deque from our spare data cache
     std::shared_ptr<AudioAnalysisData> spAnalysisData;
     if (!analysis.analysisDataCache.try_dequeue(spAnalysisData))
     {
@@ -272,20 +274,10 @@ void audio_analysis_update(AudioAnalysis& analysis, AudioBundle& bundle)
             // 0 for imaginary part
             analysis.fftOut[0] = std::complex(analysis.fftOut[0].real(), 0.0f);
 
-            float scale = 1.0f / (ctx.audioAnalysisSettings.frames * 2);
-
-            for (uint32_t i = 1; i < analysis.outputSamples; i++)
-            {
-                analysis.fftOut[i] = analysis.fftOut[i] * scale;
-            }
-
-            // Sample 0 has the sum of all terms and isn't useful to us.
-            analysis.fftOut[0] = std::complex(0.0f, 0.0f);
-
             // Convert to dB
             for (uint32_t i = 1; i < analysis.outputSamples; i++)
             {
-                analysis.fftMag[i] = std::norm(analysis.fftOut[i]);
+                analysis.fftMag[i] = std::norm(analysis.fftOut[i]) / (ctx.audioAnalysisSettings.frames * ctx.audioAnalysisSettings.frames);
             }
             analysis.fftMag[0] = 0.0f;
         }
@@ -378,6 +370,7 @@ void audio_analysis_calculate_spectrum(AudioAnalysis& analysis, AudioAnalysisDat
         }
 
         // Log based on a reference value of 1
+        spectrum[i] = std::max(analysis.fftMag[i], 1e-10f);
         spectrum[i] = 10 * std::log10(spectrum[i] / ref);
 
         // Normalize by moving up and dividing

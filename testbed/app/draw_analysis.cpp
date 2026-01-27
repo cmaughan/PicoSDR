@@ -1,5 +1,5 @@
 
-#include "demo.h"
+#include "testbed.h"
 #include "pch.h"
 
 #include <deque>
@@ -19,14 +19,7 @@ using namespace Zest;
 using namespace std::chrono;
 using namespace libremidi;
 
-namespace
-{
-Waterfall wf;
-
-}
-
-
-void demo_draw_analysis()
+void draw_analysis()
 {
     PROFILE_SCOPE(demo_draw_analysis)
     auto& ctx = GetAudioContext();
@@ -39,21 +32,6 @@ void demo_draw_analysis()
     {
         for (auto [Id, pAnalysis] : ctx.analysisChannels)
         {
-            if (Id.first != Channel_In)
-            // Only show input for now
-            {
-                continue;
-            }
-            std::shared_ptr<AudioAnalysisData> spNewData;
-            while (pAnalysis->analysisData.try_dequeue(spNewData))
-            {
-                if (pAnalysis->uiDataCache)
-                {
-                    pAnalysis->analysisDataCache.enqueue(pAnalysis->uiDataCache);
-                }
-                pAnalysis->uiDataCache = spNewData;
-            }
-
             if (!pAnalysis->uiDataCache)
             {
                 continue;
@@ -66,8 +44,9 @@ void demo_draw_analysis()
             {
                 if (i == 0)
                 {
-                    auto bucketCount = spectrumBuckets.size() / 2;
+                    auto bucketCount = spectrumBuckets.size();// 2;
                     auto sampleCount = ctx.audioDeviceSettings.sampleRate / 2;
+                    /// 2;
                     sampleCount /= uint32_t(spectrumBuckets.size());
 
                     static std::vector<float> xs1;
@@ -85,16 +64,6 @@ void demo_draw_analysis()
                         ImPlot::PlotLine("Level/Freq", xs1.data(), spectrumBuckets.data(), int(bucketCount));
                         ImPlot::EndPlot();
                     }
-
-                    if (wf.bins != bucketCount)
-                    {
-                        Waterfall_Init(wf, int(bucketCount), 50);
-                    }
-
-                    Waterfall_AccumulateMag(wf, spectrumBuckets.data(), int(bucketCount));
-
-                    Waterfall_DrawControls(wf);
-                    Waterfall_DrawPlot(wf, "Waterfall", float(bucketCount * sampleCount), ImVec2(-1, 600));
                 }
                 else
                 {

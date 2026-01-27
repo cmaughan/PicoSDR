@@ -10,7 +10,7 @@ set(IDENTIFIER "com.testbed")
 set(APP_ROOT ${CMAKE_CURRENT_LIST_DIR})
 
 list(INSERT CMAKE_MODULE_PATH 0 ${CMAKE_CURRENT_LIST_DIR}/cmake)
-include(${CMAKE_CURRENT_LIST_DIR}/cmake/demo_common.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/testbed_common.cmake)
 
 find_package(Vulkan REQUIRED)
 find_package(tinyfiledialogs CONFIG REQUIRED)
@@ -18,12 +18,13 @@ find_package(tinyfiledialogs CONFIG REQUIRED)
 
 set(TESTBED_APP_SOURCE
     ${APP_ROOT}/main.cpp
-    ${APP_ROOT}/demo.cpp
+    ${APP_ROOT}/testbed.cpp
     ${APP_ROOT}/waterfall.cpp
     ${APP_ROOT}/waterfall.h
-    ${APP_ROOT}/demo_draw_midi.cpp
-    ${APP_ROOT}/demo_draw_analysis.cpp
-    ${APP_ROOT}/demo.h
+    ${APP_ROOT}/draw_midi.cpp
+    ${APP_ROOT}/draw_analysis.cpp
+    ${APP_ROOT}/draw_waterfall.cpp
+    ${APP_ROOT}/testbed.h
     ${APP_ROOT}/CMakeLists.txt
     )
 
