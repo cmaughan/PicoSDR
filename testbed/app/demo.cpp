@@ -425,15 +425,15 @@ void demo_draw()
             auto updateRF = [&]() {
                 if (radioFrequency < 7000000)
                     radioFrequency = 7000000;
-                if (radioFrequency > 7200000)
-                    radioFrequency = 7200000;
+                if (radioFrequency > 7300000)
+                    radioFrequency = 7300000;
 
                 if (oldF != radioFrequency)
                 {
                     demo_send_frequency();
                 }
             };
-            if (ImGui::SliderInt("Frequency", &radioFrequency, 7000000, 7200000))
+            if (ImGui::SliderInt("Frequency", &radioFrequency, 7000000, 7300000))
             {
                 updateRF();
             }
