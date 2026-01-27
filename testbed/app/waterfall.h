@@ -23,14 +23,14 @@ struct Waterfall
     float adapt = 0.08f;       // EMA alpha (0..1); higher = faster tracking
 
     // ---- User controls ----
-    float rangeDb = 50.0f;      // dynamic range shown above floor
-    float floorOffsetDb = 0.0f; // manual bias applied to auto (and locked) floor
+    float rangeDb = 27.0f;      // dynamic range shown above floor
+    float floorOffsetDb = -2.0f; // manual bias applied to auto (and locked) floor
 
     bool lockNoiseFloor = false;
-    float lockedNoiseDb = -90.0f;
+    float lockedNoiseDb = -190.0f;
 
     bool manualFloor = false;
-    float manualFloorDb = -90.0f;
+    float manualFloorDb = -190.0f;
 
     bool enabled = true;
 
@@ -41,6 +41,7 @@ struct Waterfall
 
     int noiseWindowN = 20; // how many committed rows to use
     int noiseWinHead = 0;
+    int noiseWinCount = 0;
     std::vector<float> noiseWinDb; // size noiseWindowN
     bool useMedianNoise = true;    // median vs mean
 };

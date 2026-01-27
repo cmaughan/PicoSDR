@@ -49,7 +49,7 @@ void draw_waterfall()
         const auto& spectrumBuckets = pAnalysis->uiDataCache->spectrumBuckets;
         if (!spectrumBuckets.empty())
         {
-            auto bucketCount = spectrumBuckets.size(); // 2;
+            auto bucketCount = spectrumBuckets.size() / 2;
             auto sampleCount = ctx.audioDeviceSettings.sampleRate / 2;
             /// 2;
             sampleCount /= uint32_t(spectrumBuckets.size());

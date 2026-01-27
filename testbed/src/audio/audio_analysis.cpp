@@ -80,7 +80,7 @@ void audio_analysis_destroy_all()
         audio_analysis_stop(*analysis);
         if (analysis->cfg)
         {
-            kiss_fft_free(analysis->cfg);
+            kiss_fftr_free(analysis->cfg);
             analysis->cfg = nullptr;
         }
     }
@@ -178,15 +178,14 @@ bool audio_analysis_init(AudioAnalysis& analysis, AudioAnalysisData& analysisDat
         analysis.totalWin += win;
     }
 
-    // Imaginary part of audio input always 0.
-    analysis.fftIn.resize(ctx.audioAnalysisSettings.frames, std::complex<float>{0.0, 0.0});
-    analysis.fftOut.resize(ctx.audioAnalysisSettings.frames);
-    analysis.fftMag.resize(ctx.audioAnalysisSettings.frames);
+    analysis.fftIn.resize(ctx.audioAnalysisSettings.frames, 0.0f);
+    analysis.fftOut.resize(analysis.outputSamples);
+    analysis.fftMag.resize(analysis.outputSamples);
 
     analysisData.spectrum.resize(analysis.outputSamples, (0));
     analysisData.audio.resize(ctx.audioAnalysisSettings.frames, 0.0f);
 
-    analysis.cfg = kiss_fft_alloc(ctx.audioAnalysisSettings.frames, 0, 0, 0);
+    analysis.cfg = kiss_fftr_alloc(ctx.audioAnalysisSettings.frames, 0, 0, 0);
 
     return true;
 }
@@ -260,26 +259,30 @@ void audio_analysis_update(AudioAnalysis& analysis, AudioBundle& bundle)
                 // Hamming window, FF
                 if (analysis.audioActive)
                 {
-                    analysis.fftIn[i] = std::complex(audioBuffer[i] * analysis.window[i], 0.0f);
+                    analysis.fftIn[i] = audioBuffer[i] * analysis.window[i];
                 }
                 else
                 {
-                    analysis.fftIn[i] = std::complex(0.0f, 0.0f);
+                    analysis.fftIn[i] = 0.0f;
                 }
             }
 
-            kiss_fft(analysis.cfg, (const kiss_fft_cpx*)&analysis.fftIn[0], (kiss_fft_cpx*)&analysis.fftOut[0]);
+            kiss_fftr(analysis.cfg, analysis.fftIn.data(), analysis.fftOut.data());
 
             // 0 for imaginary part
-            analysis.fftOut[0] = std::complex(analysis.fftOut[0].real(), 0.0f);
+            analysis.fftOut[0].i = 0.0f;
 
             // Convert to dB
+            auto winScale = std::max(analysis.totalWin, 1e-6f);
             for (uint32_t i = 1; i < analysis.outputSamples; i++)
             {
-                auto winScale = std::max(analysis.totalWin, 1e-6f);
-                analysis.fftMag[i] = std::norm(analysis.fftOut[i]) / (winScale * winScale);
+                const float real = analysis.fftOut[i].r;
+                const float imag = analysis.fftOut[i].i;
+                analysis.fftMag[i] = (real * real + imag * imag) / (winScale * winScale);
             }
-            analysis.fftMag[0] = 0.0f;
+            const float dcReal = analysis.fftOut[0].r;
+            const float dcImag = analysis.fftOut[0].i;
+            analysis.fftMag[0] = (dcReal * dcReal + dcImag * dcImag) / (winScale * winScale);
         }
 
         audio_analysis_calculate_spectrum(analysis, analysisData);
@@ -297,7 +300,7 @@ void audio_analysis_calculate_audio(AudioAnalysis& analysis, AudioAnalysisData& 
     auto& ctx = GetAudioContext();
 
     // TODO: This can't be right?
-    auto samplesPerSecond = analysis.channel.sampleRate / (float)analysis.channel.frames;
+    auto samplesPerSecond = analysis.channel.sampleRate / (float)ctx.audioAnalysisSettings.frames;
     auto blendFactor = 64.0f / samplesPerSecond;
 
     // Copy the data into the real part, windowing it to remove the transitions at the edges of the transform.
@@ -355,12 +358,18 @@ void audio_analysis_calculate_spectrum(AudioAnalysis& analysis, AudioAnalysisDat
         // Magnitude
         const float ref = 1.0f; // Source reference value, but we are +/1.0f
 
+        const bool hasNyquist = (ctx.audioAnalysisSettings.frames % 2) == 0;
         // Magnitude * 2 because we are half the spectrum,
         // divided by the total of the hamming window to compenstate
         spectrum[i] = analysis.fftMag[i];
-        if (i != 0 && i != (analysis.outputSamples - 1))
+        if (i != 0 && !(hasNyquist && i == (analysis.outputSamples - 1)))
         {
             spectrum[i] *= 2.0f;
+        }
+        if (i == 0 && ctx.audioAnalysisSettings.suppressDc)
+        {
+            spectrum[i] = 0.0f;
+            continue;
         }
         spectrum[i] = std::max(spectrum[i], std::numeric_limits<float>::min());
 
@@ -373,7 +382,7 @@ void audio_analysis_calculate_spectrum(AudioAnalysis& analysis, AudioAnalysisDat
         }
 
         // Log based on a reference value of 1
-        spectrum[i] = std::max(analysis.fftMag[i], 1e-10f);
+        spectrum[i] = std::max(spectrum[i], 1e-10f);
         spectrum[i] = 10 * std::log10(spectrum[i] / ref);
 
         // Normalize by moving up and dividing
@@ -470,24 +479,25 @@ void audio_analysis_calculate_spectrum(AudioAnalysis& analysis, AudioAnalysisDat
 
     if (ctx.audioAnalysisSettings.blendFFT)
     {
-        /*
-        auto& spectrumBucketsOld = analysisData.spectrumBuckets[1 - analysisData.currentBuffer];
-        if (spectrumBuckets.size() == spectrumBucketsOld.size())
+        if (analysis.spectrumBucketsEma.size() != spectrumBuckets.size())
         {
-            // Time in seconds
-            auto deltaTimeFrame = analysis.channel.deltaTime * analysis.channel.frames;
-
-            // Blend factor is blend time / time in seconds
-            auto blendFactor = 1.0f - (ctx.audioAnalysisSettings.blendFactor / 1000.0f);
-            blendFactor = std::clamp(blendFactor, 0.01f, 1.0f);
+            analysis.spectrumBucketsEma = spectrumBuckets;
+        }
+        else
+        {
+            // Time in seconds for a full FFT frame
+            const float deltaTimeFrame = float(analysis.channel.deltaTime * ctx.audioAnalysisSettings.frames);
+            const float blendSeconds = std::max(ctx.audioAnalysisSettings.blendFactor / 1000.0f, 1e-4f);
+            const float alpha = std::clamp(1.0f - std::exp(-deltaTimeFrame / blendSeconds), 0.0f, 1.0f);
 
             for (size_t i = 0; i < spectrumBuckets.size(); i++)
             {
-                // Blend with previous result
-                spectrumBuckets[i] = spectrumBuckets[i] * blendFactor + spectrumBucketsOld[i] * (1.0f - blendFactor);
+                const float current = spectrumBuckets[i];
+                const float previous = analysis.spectrumBucketsEma[i];
+                analysis.spectrumBucketsEma[i] = previous + alpha * (current - previous);
+                spectrumBuckets[i] = analysis.spectrumBucketsEma[i];
             }
         }
-        */
     }
 
     audio_analysis_calculate_spectrum_bands(analysis, analysisData);

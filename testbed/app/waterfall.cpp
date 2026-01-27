@@ -35,13 +35,43 @@ float EstimateNoiseDb_BottomMean(const float* lineDb, int bins) {
     return sum / float(k);
 }
 
+float ReduceNoiseWindow(const std::vector<float>& window, bool useMedian) {
+    if (window.empty()) return -120.0f;
+    if (!useMedian) {
+        float sum = 0.0f;
+        for (float v : window) sum += v;
+        return sum / float(window.size());
+    }
+
+    static thread_local std::vector<float> work;
+    work = window;
+    const size_t mid = work.size() / 2;
+    std::nth_element(work.begin(), work.begin() + mid, work.end());
+    if (work.size() % 2 == 1)
+        return work[mid];
+
+    const float hi = work[mid];
+    std::nth_element(work.begin(), work.begin() + (mid - 1), work.end());
+    const float lo = work[mid - 1];
+    return 0.5f * (lo + hi);
+}
+
 // Push a fully-formed dB line into the ring buffer, and update emaNoiseDb if not locked/manual.
 void PushLineDb(Waterfall& wf, const float* lineDb) {
     // Update auto noise estimate unless user says "nope"
     if (!wf.manualFloor && !wf.lockNoiseFloor) {
         const float noiseNow = EstimateNoiseDb_BottomMean(lineDb, wf.bins);
+        if (wf.noiseWindowN < 1) wf.noiseWindowN = 1;
+        if ((int)wf.noiseWinDb.size() != wf.noiseWindowN) {
+            wf.noiseWinDb.assign(size_t(wf.noiseWindowN), noiseNow);
+            wf.noiseWinHead = 0;
+        }
+        wf.noiseWinDb[size_t(wf.noiseWinHead)] = noiseNow;
+        wf.noiseWinHead = (wf.noiseWinHead + 1) % wf.noiseWindowN;
+
+        const float noiseAvg = ReduceNoiseWindow(wf.noiseWinDb, wf.useMedianNoise);
         const float a = Clamp(wf.adapt, 0.0f, 1.0f);
-        wf.emaNoiseDb = (1.0f - a) * wf.emaNoiseDb + a * noiseNow;
+        wf.emaNoiseDb = (1.0f - a) * wf.emaNoiseDb + a * noiseAvg;
     }
 
     // Store ordered line
@@ -67,6 +97,10 @@ void Waterfall_Init(Waterfall& wf, int bins, int rows) {
     wf.accumulateN = std::max(1, wf.accumulateN);
     wf.accCount = 0;
     wf.accPowerSum.assign(size_t(wf.bins), 0.0f);
+
+    wf.noiseWindowN = std::max(1, wf.noiseWindowN);
+    wf.noiseWinHead = 0;
+    wf.noiseWinDb.assign(size_t(wf.noiseWindowN), wf.emaNoiseDb);
 }
 
 void Waterfall_Reset(Waterfall& wf) {
@@ -79,6 +113,10 @@ void Waterfall_Reset(Waterfall& wf) {
 
     wf.accCount = 0;
     std::fill(wf.accPowerSum.begin(), wf.accPowerSum.end(), 0.0f);
+
+    wf.noiseWindowN = std::max(1, wf.noiseWindowN);
+    wf.noiseWinHead = 0;
+    wf.noiseWinDb.assign(size_t(wf.noiseWindowN), wf.emaNoiseDb);
 }
 
 void Waterfall_AccumulateMag(Waterfall& wf, const float* spectrumMag, int spectrumCount) {
@@ -148,7 +186,7 @@ float Waterfall_CeilDb(const Waterfall& wf) {
 }
 
 void Waterfall_DrawControls(Waterfall& wf) {
-    // The “radio panel” bits
+    // The ?radio panel? bits
     ImGui::Checkbox("WF Enabled", &wf.enabled);
 
     ImGui::SliderFloat("WF Range (dB)", &wf.rangeDb, 10.0f, 90.0f, "%.1f");
@@ -158,6 +196,8 @@ void Waterfall_DrawControls(Waterfall& wf) {
     ImGui::Separator();
 
     ImGui::SliderFloat("WF Offset (dB)", &wf.floorOffsetDb, -40.0f, 40.0f, "%.1f");
+    ImGui::SliderInt("WF Noise Window (rows)", &wf.noiseWindowN, 1, 64);
+    ImGui::Checkbox("WF Noise Median", &wf.useMedianNoise);
 
     if (ImGui::Checkbox("WF Lock Noise", &wf.lockNoiseFloor)) {
         if (wf.lockNoiseFloor) {
@@ -198,7 +238,7 @@ void Waterfall_DrawPlot(Waterfall& wf, const char* plotTitle, float maxHz, ImVec
         ImPlot::SetupAxisLimits(ImAxis_X1, x0, x1, ImPlotCond_Always);
         ImPlot::SetupAxisLimits(ImAxis_Y1, y0, y1, ImPlotCond_Always);
 
-        // “Classic radio-ish” (widely available in older ImPlot)
+        // ?Classic radio-ish? (widely available in older ImPlot)
         ImPlot::PushColormap(ImPlotColormap_Jet);
 
         ImPlot::PlotHeatmap(
