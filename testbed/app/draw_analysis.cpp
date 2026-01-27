@@ -1,5 +1,5 @@
 
-#include "demo.h"
+#include "testbed.h"
 #include "pch.h"
 
 #include <deque>
@@ -12,12 +12,14 @@
 
 #include <implot.h>
 
+#include "waterfall.h"
+
 using namespace Zing;
 using namespace Zest;
 using namespace std::chrono;
 using namespace libremidi;
 
-void demo_draw_analysis()
+void draw_analysis()
 {
     PROFILE_SCOPE(demo_draw_analysis)
     auto& ctx = GetAudioContext();
@@ -30,17 +32,12 @@ void demo_draw_analysis()
     {
         for (auto [Id, pAnalysis] : ctx.analysisChannels)
         {
-            std::shared_ptr<AudioAnalysisData> spNewData;
-            while (pAnalysis->analysisData.try_dequeue(spNewData))
-            {
-                if (pAnalysis->uiDataCache)
-                {
-                    pAnalysis->analysisDataCache.enqueue(pAnalysis->uiDataCache);
-                }
-                pAnalysis->uiDataCache = spNewData;
-            }
-
             if (!pAnalysis->uiDataCache)
+            {
+                continue;
+            }
+        
+            if (Id.first != Channel_In)
             {
                 continue;
             }
@@ -54,6 +51,7 @@ void demo_draw_analysis()
                 {
                     auto bucketCount = spectrumBuckets.size() / 2;
                     auto sampleCount = ctx.audioDeviceSettings.sampleRate / 2;
+                    /// 2;
                     sampleCount /= uint32_t(spectrumBuckets.size());
 
                     static std::vector<float> xs1;

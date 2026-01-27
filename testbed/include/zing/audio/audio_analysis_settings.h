@@ -20,6 +20,7 @@ struct AudioAnalysisSettings
     bool filterFFT = true;
     bool normalizeAudio = false;
     bool removeFFTJitter = false;
+    bool suppressDc = false;
     glm::uvec4 spectrumFrequencies = glm::uvec4(100, 500, 3000, 10000);
     glm::vec4 spectrumGains = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
     float audioDecibelRange = 110.0f;
@@ -42,6 +43,7 @@ inline AudioAnalysisSettings audioanalysis_load_settings(const toml::table& sett
         analysisSettings.logPartitions = settings["log_partitions"].value_or(analysisSettings.logPartitions);
         analysisSettings.filterFFT = settings["filter_fft"].value_or(analysisSettings.filterFFT);
         analysisSettings.removeFFTJitter = settings["dejitter_fft"].value_or(analysisSettings.removeFFTJitter);
+        analysisSettings.suppressDc = settings["suppress_dc"].value_or(analysisSettings.suppressDc);
         analysisSettings.spectrumFrequencies = toml_read_vec4(settings["spectrum_frequencies"], analysisSettings.spectrumFrequencies);
         analysisSettings.spectrumGains = toml_read_vec4(settings["spectrum_gains"], analysisSettings.spectrumGains);
         analysisSettings.audioDecibelRange = settings["audio_decibels"].value_or(analysisSettings.audioDecibelRange);
@@ -67,6 +69,7 @@ inline toml::table audioanalysis_save_settings(const AudioAnalysisSettings& sett
         { "blend_fft", settings.blendFFT },
         { "filter_fft", settings.filterFFT },
         { "dejitter_fft", settings.removeFFTJitter },
+        { "suppress_dc", settings.suppressDc },
         { "log_partitions", settings.logPartitions },
         { "spectrum_frequencies", toml::array{ freq.x, freq.y, freq.z, freq.w } },
         { "spectrum_gains", toml::array{ gain.x, gain.y, gain.z, gain.w } },

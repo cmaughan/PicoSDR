@@ -1,6 +1,6 @@
 #include "pch.h"
 
-#include "demo.h"
+#include "testbed.h"
 
 #include <zest/file/file.h>
 #include <zest/settings/settings.h>
@@ -31,10 +31,6 @@ using namespace libremidi;
 namespace
 {
 
-// Playing a note using a custom synth demo
-std::atomic<bool> playingNote = false;
-std::atomic<bool> playNote = false;
-
 int radioFrequency = 7030000;
 bool sendFrequency = false;
 libremidi::midi_out midiTarget;
@@ -55,70 +51,13 @@ std::future<std::shared_ptr<libremidi::reader>> midiReaderFuture;
 
 } //namespace
 
-// A simple command which uses the wave table to play a note with a phaser.
-// Just an example of generating custom audio
-void demo_synth_note(float* pOut, uint32_t samples)
-{
-    auto& ctx = GetAudioContext();
-
-    if (playNote)
-    {
-        // Create a wavetable and an an oscillator
-        if (!osc)
-        {
-            sp_ftbl_create(ctx.pSP, &ft, 8192);
-            sp_osc_create(&osc);
-
-            sp_gen_triangle(ctx.pSP, ft);
-            sp_osc_init(ctx.pSP, osc, ft, 0);
-            osc->freq = 500;
-
-            sp_phaser_create(&phs);
-            sp_phaser_init(ctx.pSP, phs);
-        }
-
-        playNote = false;
-        playingNote = true;
-        noteStartTime = duration_cast<milliseconds>(timer_get_elapsed(ctx.m_masterClock));
-    }
-    else
-    {
-        if (!playingNote)
-        {
-            return;
-        }
-    }
-
-    auto currentTime = duration_cast<milliseconds>(timer_get_elapsed(ctx.m_masterClock));
-    auto expired = (currentTime - noteStartTime).count() > 1000;
-
-    if (playingNote && expired)
-    {
-        playingNote = false;
-        return;
-    }
-
-    for (uint32_t i = 0; i < samples; i++)
-    {
-        float out[2] = {0.0f, 0.0f};
-
-        sp_osc_compute(ctx.pSP, osc, &out[0], &out[0]);
-        sp_phaser_compute(ctx.pSP, phs, &out[0], &out[0], &out[0], &out[1]);
-
-        for (uint32_t ch = 0; ch < ctx.outputState.channelCount; ch++)
-        {
-            *pOut++ += out[ch];
-        }
-    }
-}
-
-void demo_register_windows()
+void register_windows()
 {
     layout_manager_register_window("profiler", "Profiler", &showProfiler);
     layout_manager_register_window("audio", "Audio State", &showAudio);
     layout_manager_register_window("settings", "Audio Settings", &showAudioSettings);
     layout_manager_register_window("debug_settings", "Debug Settings", &showDebugSettings);
-    layout_manager_register_window("demo_window", "Demo Window", &showDemoWindow);
+    layout_manager_register_window("window", "Demo Window", &showDemoWindow);
 
     layout_manager_load_layouts_file("zing", [](const std::string& name, const LayoutInfo& info) {
         if (!info.windowLayout.empty())
@@ -140,7 +79,7 @@ libusb_device_handle* dev = nullptr;
 std::atomic<bool> quitBulkVendorThread = false;
 std::thread bulkThread;
 
-void demo_bulk_vendor_release()
+void bulk_vendor_release()
 {
     quitBulkVendorThread = true;
     if (bulkThread.joinable())
@@ -162,7 +101,7 @@ void demo_bulk_vendor_release()
     }
 }
 
-void demo_bulk_vendor_init()
+void bulk_vendor_init()
 {
     ctx = nullptr;
     dev = nullptr;
@@ -258,7 +197,7 @@ void demo_bulk_vendor_init()
     }));
 }
 
-void demo_bulk_vendor_get_profile()
+void bulk_vendor_get_profile()
 {
     if (ctx && dev)
     {
@@ -290,12 +229,12 @@ void send_u32_sysex(libremidi::midi_out& midi, uint32_t value)
     midi.send_message(sysex);
 }
 
-void demo_send_frequency()
+void send_frequency()
 {
     send_u32_sysex(midiTarget, static_cast<uint32_t>(radioFrequency));
 }
 
-void demo_init_midi_target()
+void init_midi_target()
 {
     libremidi::observer obs;
     auto ports = obs.get_output_ports();
@@ -311,16 +250,16 @@ void demo_init_midi_target()
     }
 }
 
-void demo_init()
+void init()
 {
     auto& ctx = GetAudioContext();
 
     // Lock the ticker to avoid loading conflicts (we unlock when fonts are loaded)
     //ctx.audioTickEnableMutex.lock();
 
-    demo_register_windows();
+    register_windows();
 
-    demo_bulk_vendor_init();
+    bulk_vendor_init();
 
     audio_init([=](const std::chrono::microseconds hostTime, void* pOutput, std::size_t numSamples) {
         auto& ctx = GetAudioContext();
@@ -328,22 +267,19 @@ void demo_init()
         {
             ((float*)pOutput)[i] = 0.0f;
         }
-
-        // Do extra audio synth work here
-        demo_synth_note((float*)pOutput, uint32_t(numSamples));
     });
 
-    demo_init_midi_target();
+    init_midi_target();
 }
 
 // Called outside of the the ImGui frame
-void demo_tick()
+void tick()
 {
     auto& ctx = GetAudioContext();
     layout_manager_update();
 }
 
-void demo_draw_menu()
+void draw_menu()
 {
     if (ImGui::BeginMainMenuBar())
     {
@@ -357,7 +293,7 @@ void demo_draw_menu()
         {
             if (ImGui::MenuItem("Get Profile Pico"))
             {
-                demo_bulk_vendor_get_profile();
+                bulk_vendor_get_profile();
             }
             ImGui::EndMenu();
         }
@@ -368,13 +304,36 @@ void demo_draw_menu()
     layout_manager_do_menu_popups();
 }
 
-void demo_draw()
+void update_analysis()
 {
-    PROFILE_SCOPE(demo_draw)
+    auto& ctx = GetAudioContext();
+    for (auto [Id, pAnalysis] : ctx.analysisChannels)
+    {
+        // analysisDataCache-> <analysis thread> -> analysisData -> <ui thread> -> uiDataCache
+        // Find any data from the analysis thread
+        std::shared_ptr<AudioAnalysisData> spNewData;
+        while (pAnalysis->analysisData.try_dequeue(spNewData))
+        {
+            // If we cached data, then return it to the pool
+            if (pAnalysis->uiDataCache)
+            {
+                // Return to the pool
+                pAnalysis->analysisDataCache.enqueue(pAnalysis->uiDataCache);
+            }
+
+            // New copy
+            pAnalysis->uiDataCache = spNewData;
+        }
+    }
+}
+
+void draw()
+{
+    PROFILE_SCOPE(draw)
 
     auto& ctx = GetAudioContext();
 
-    demo_draw_menu();
+    draw_menu();
 
     if (showDemoWindow)
     {
@@ -408,6 +367,8 @@ void demo_draw()
         ImGui::End();
     }
 
+    update_analysis();
+
     // Link state, Audio settings, metronome, etc.
     if (showAudio)
     {
@@ -415,11 +376,6 @@ void demo_draw()
         {
             ImGui::SeparatorText("Test");
             ImGui::BeginDisabled(ctx.outputState.channelCount == 0 ? true : false);
-
-            if (ImGui::Button("Play Note"))
-            {
-                playNote = true;
-            }
 
             auto oldF = radioFrequency;
             auto updateRF = [&]() {
@@ -430,7 +386,7 @@ void demo_draw()
 
                 if (oldF != radioFrequency)
                 {
-                    demo_send_frequency();
+                    send_frequency();
                 }
             };
             if (ImGui::SliderInt("Frequency", &radioFrequency, 7000000, 7300000))
@@ -462,7 +418,7 @@ void demo_draw()
 
             if (ImGui::Button("Update Frequency"))
             {
-                demo_send_frequency();
+                send_frequency();
             }
 
             bool midi = ctx.settings.enableMidi;
@@ -473,16 +429,22 @@ void demo_draw()
             ImGui::EndDisabled();
 
             ImGui::SeparatorText("Analysis");
-            demo_draw_analysis();
+            draw_analysis();
         }
 
+        ImGui::End();
+        
+        if (ImGui::Begin("Waterfall", &showAudio))
+        {
+            draw_waterfall();
+        }
         ImGui::End();
     }
 }
 
-void demo_cleanup()
+void cleanup()
 {
-    demo_bulk_vendor_release();
+    bulk_vendor_release();
 
     layout_manager_save();
 

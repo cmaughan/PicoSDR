@@ -26,7 +26,7 @@ struct tsf;
 #include <ableton/platforms/Config.hpp>
 #include <ableton/Link.hpp>
 
-#include <kiss_fft.h>
+#include <kiss_fftr.h>
 
 union SDL_Event;
 
@@ -108,9 +108,9 @@ using ChannelId = std::pair<uint32_t, uint32_t>;
 struct AudioAnalysis
 {
     // FFT
-    kiss_fft_cfg cfg;
-    std::vector<std::complex<float>> fftIn;
-    std::vector<std::complex<float>> fftOut;
+    kiss_fftr_cfg cfg;
+    std::vector<kiss_fft_scalar> fftIn;
+    std::vector<kiss_fft_cpx> fftOut;
     std::vector<float> fftMag;
     std::vector<float> window;
 
@@ -139,6 +139,7 @@ struct AudioAnalysis
     std::vector<float> spectrumPartitions;
     SpectrumPartitionSettings lastSpectrumPartitions;
     bool logPartitions = true;
+    std::vector<float> spectrumBucketsEma;
 
     // Bundles pending processing
     moodycamel::ConcurrentQueue<std::shared_ptr<AudioBundle>> processBundles;

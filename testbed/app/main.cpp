@@ -20,7 +20,7 @@
 #include "config_testbed_app.h"
 //#include <config_app.h>
 
-#include "demo.h"
+#include "testbed.h"
 
 #include <libusb/libusb/libusb.h>
 
@@ -532,7 +532,7 @@ int main(int, char**)
     bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
-    demo_init();
+    init();
 
     // Main loop
     bool done = false;
@@ -561,7 +561,7 @@ int main(int, char**)
             continue;
         }
 
-        demo_tick();
+        tick();
 
         // Resize swap chain?
         int fb_width, fb_height;
@@ -618,7 +618,7 @@ int main(int, char**)
             ImGui::End();
         }
 
-        demo_draw();
+        draw();
 
         // Rendering
         ImGui::Render();
@@ -639,7 +639,7 @@ int main(int, char**)
     err = vkDeviceWaitIdle(g_Device);
     check_vk_result(err);
 
-    demo_cleanup();
+    cleanup();
 
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplSDL3_Shutdown();

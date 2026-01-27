@@ -32,10 +32,13 @@ const uint32_t buffer_time = AUDIO_SAMPLE_RATE / 1000; // 1ms buffer
 const uint32_t buffer_samples = buffer_time * CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_TX;
 
 const uint32_t num_buffer_pages = 10;
-uint32_t current_buffer_page = 0;
+uint32_t write_buffer_page = 0;
+uint32_t read_buffer_page = 0;
+uint32_t write_buffer_sample = 0;
+uint32_t read_buffer_offset = 0;
+uint32_t filled_pages = 0;
 std::array<std::array<int16_t, buffer_samples>, num_buffer_pages> i2s_buffer;
 uint32_t bufferSample = 0;
-uint32_t current_buffer_sample = 0;
 
 uint16_t adcVal;
 
@@ -381,12 +384,18 @@ void audio_set_frequency(uint32_t frequency)
 
 void audio_add_sample(float sample)
 {
-    if (current_buffer_sample >= buffer_samples)
+    if (filled_pages >= num_buffer_pages)
     {
-        current_buffer_sample++;
         return; // buffer full
-    } 
-    i2s_buffer[current_buffer_page][current_buffer_sample++] = int16_t(sample * 32767.0f);
+    }
+
+    i2s_buffer[write_buffer_page][write_buffer_sample++] = int16_t(sample * 32767.0f);
+    if (write_buffer_sample >= buffer_samples)
+    {
+        filled_pages++;
+        write_buffer_page = (write_buffer_page + 1) % num_buffer_pages;
+        write_buffer_sample = 0;
+    }
 }
 
 // We assume that the audio data is read from an I2S buffer.
@@ -418,21 +427,38 @@ void audio_task(void)
     }
         */
 
-    auto written = tud_audio_write((const void*)&i2s_buffer[current_buffer_page][0], uint16_t(buffer_samples * sizeof(int16_t)));
-    written >>= 1;
-    if (written < buffer_samples)
+    if (filled_pages == 0)
     {
-        LOG(DBG, "Overrun");
+        return; // no full buffers to send
     }
 
-    auto next_buffer_page = (current_buffer_page + 1) % num_buffer_pages;
-    current_buffer_page = next_buffer_page;
-
-    if (current_buffer_sample > buffer_samples)
+    const uint32_t samples_available = buffer_samples - read_buffer_offset;
+    if (samples_available == 0)
     {
-        LOG(DBG, "Left Samples: " << (current_buffer_sample - buffer_samples));
+        read_buffer_offset = 0;
+        read_buffer_page = (read_buffer_page + 1) % num_buffer_pages;
+        filled_pages--;
+        return;
     }
-    current_buffer_sample = 0;
+
+    const uint32_t bytes_to_write = samples_available * sizeof(int16_t);
+    const uint32_t written = tud_audio_write(
+        (const void*)&i2s_buffer[read_buffer_page][read_buffer_offset],
+        uint16_t(bytes_to_write));
+    const uint32_t written_samples = written / sizeof(int16_t);
+
+    if (written_samples == 0)
+    {
+        return;
+    }
+
+    read_buffer_offset += written_samples;
+    if (read_buffer_offset >= buffer_samples)
+    {
+        read_buffer_offset = 0;
+        read_buffer_page = (read_buffer_page + 1) % num_buffer_pages;
+        filled_pages--;
+    }
 }
 
 } // namespace MPico
