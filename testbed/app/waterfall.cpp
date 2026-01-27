@@ -35,16 +35,16 @@ float EstimateNoiseDb_BottomMean(const float* lineDb, int bins) {
     return sum / float(k);
 }
 
-float ReduceNoiseWindow(const std::vector<float>& window, bool useMedian) {
-    if (window.empty()) return -120.0f;
+float ReduceNoiseWindowSpan(const float* data, int count, bool useMedian) {
+    if (!data || count <= 0) return -120.0f;
     if (!useMedian) {
         float sum = 0.0f;
-        for (float v : window) sum += v;
-        return sum / float(window.size());
+        for (int i = 0; i < count; ++i) sum += data[i];
+        return sum / float(count);
     }
 
     static thread_local std::vector<float> work;
-    work = window;
+    work.assign(data, data + count);
     const size_t mid = work.size() / 2;
     std::nth_element(work.begin(), work.begin() + mid, work.end());
     if (work.size() % 2 == 1)
@@ -65,13 +65,24 @@ void PushLineDb(Waterfall& wf, const float* lineDb) {
         if ((int)wf.noiseWinDb.size() != wf.noiseWindowN) {
             wf.noiseWinDb.assign(size_t(wf.noiseWindowN), noiseNow);
             wf.noiseWinHead = 0;
+            wf.noiseWinCount = 0;
         }
-        wf.noiseWinDb[size_t(wf.noiseWinHead)] = noiseNow;
-        wf.noiseWinHead = (wf.noiseWinHead + 1) % wf.noiseWindowN;
+        if (wf.noiseWinCount < wf.noiseWindowN) {
+            wf.noiseWinDb[size_t(wf.noiseWinCount++)] = noiseNow;
+        } else {
+            wf.noiseWinDb[size_t(wf.noiseWinHead)] = noiseNow;
+            wf.noiseWinHead = (wf.noiseWinHead + 1) % wf.noiseWindowN;
+        }
 
-        const float noiseAvg = ReduceNoiseWindow(wf.noiseWinDb, wf.useMedianNoise);
-        const float a = Clamp(wf.adapt, 0.0f, 1.0f);
-        wf.emaNoiseDb = (1.0f - a) * wf.emaNoiseDb + a * noiseAvg;
+        const int noiseCount = std::max(1, wf.noiseWinCount);
+        const float noiseAvg = ReduceNoiseWindowSpan(wf.noiseWinDb.data(), noiseCount, wf.useMedianNoise);
+        if (wf.noiseWinCount < wf.noiseWindowN) {
+            // Bootstrap to a reasonable starting floor while window fills.
+            wf.emaNoiseDb = noiseAvg;
+        } else {
+            const float a = Clamp(wf.adapt, 0.0f, 1.0f);
+            wf.emaNoiseDb = (1.0f - a) * wf.emaNoiseDb + a * noiseAvg;
+        }
     }
 
     // Store ordered line
@@ -79,6 +90,7 @@ void PushLineDb(Waterfall& wf, const float* lineDb) {
     std::memcpy(dst, lineDb, size_t(wf.bins) * sizeof(float));
 
     wf.head = (wf.head + 1) % wf.rows;
+    wf.rowsWritten = std::min(wf.rowsWritten + 1, wf.rows);
 }
 
 } // namespace
@@ -87,6 +99,7 @@ void Waterfall_Init(Waterfall& wf, int bins, int rows) {
     wf.bins = std::max(0, bins);
     wf.rows = std::max(1, rows);
     wf.head = 0;
+    wf.rowsWritten = 0;
 
     wf.emaNoiseDb = -90.0f;
     wf.lockedNoiseDb = wf.emaNoiseDb;
@@ -100,11 +113,13 @@ void Waterfall_Init(Waterfall& wf, int bins, int rows) {
 
     wf.noiseWindowN = std::max(1, wf.noiseWindowN);
     wf.noiseWinHead = 0;
+    wf.noiseWinCount = 0;
     wf.noiseWinDb.assign(size_t(wf.noiseWindowN), wf.emaNoiseDb);
 }
 
 void Waterfall_Reset(Waterfall& wf) {
     wf.head = 0;
+    wf.rowsWritten = 0;
     wf.emaNoiseDb = -90.0f;
     wf.lockedNoiseDb = wf.emaNoiseDb;
 
@@ -116,6 +131,7 @@ void Waterfall_Reset(Waterfall& wf) {
 
     wf.noiseWindowN = std::max(1, wf.noiseWindowN);
     wf.noiseWinHead = 0;
+    wf.noiseWinCount = 0;
     wf.noiseWinDb.assign(size_t(wf.noiseWindowN), wf.emaNoiseDb);
 }
 
@@ -162,9 +178,22 @@ void Waterfall_BuildUpload(Waterfall& wf) {
     if (wf.uploadDb.size() != wf.ringDb.size())
         wf.uploadDb.resize(wf.ringDb.size());
 
-    // Oldest row is wf.head (next to be overwritten). Oldest at top.
+    // Newest row at bottom (y=0). Older rows move upward.
+    if (wf.rowsWritten <= 0) {
+        const float fill = Waterfall_FloorDb(wf);
+        std::fill(wf.uploadDb.begin(), wf.uploadDb.end(), fill);
+        return;
+    }
+
+    const int newestRow = (wf.head - 1 + wf.rows) % wf.rows;
     for (int y = 0; y < wf.rows; ++y) {
-        const int ringRow = (wf.head + y) % wf.rows;
+        if (y >= wf.rowsWritten) {
+            const float fill = Waterfall_FloorDb(wf);
+            float* dst = wf.uploadDb.data() + size_t(y) * size_t(wf.bins);
+            std::fill(dst, dst + wf.bins, fill);
+            continue;
+        }
+        const int ringRow = (newestRow - y + wf.rows) % wf.rows;
         const float* src = wf.ringDb.data() + size_t(ringRow) * size_t(wf.bins);
         float* dst = wf.uploadDb.data() + size_t(y) * size_t(wf.bins);
         std::memcpy(dst, src, size_t(wf.bins) * sizeof(float));
@@ -187,37 +216,37 @@ float Waterfall_CeilDb(const Waterfall& wf) {
 
 void Waterfall_DrawControls(Waterfall& wf) {
     // The ?radio panel? bits
-    ImGui::Checkbox("WF Enabled", &wf.enabled);
+    if (ImGui::CollapsingHeader("Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::SliderFloat("WF Range (dB)", &wf.rangeDb, 10.0f, 90.0f, "%.1f");
+        ImGui::SliderFloat("WF Adapt", &wf.adapt, 0.001f, 0.30f, "%.3f");
+        ImGui::SliderInt("WF Speed (spectra/row)", &wf.accumulateN, 1, 64);
 
-    ImGui::SliderFloat("WF Range (dB)", &wf.rangeDb, 10.0f, 90.0f, "%.1f");
-    ImGui::SliderFloat("WF Adapt", &wf.adapt, 0.001f, 0.30f, "%.3f");
-    ImGui::SliderInt("WF Speed (spectra/row)", &wf.accumulateN, 1, 64);
+        ImGui::Separator();
 
-    ImGui::Separator();
+        ImGui::SliderFloat("WF Offset (dB)", &wf.floorOffsetDb, -40.0f, 40.0f, "%.1f");
+        ImGui::SliderInt("WF Noise Window (rows)", &wf.noiseWindowN, 1, 64);
+        ImGui::Checkbox("WF Noise Median", &wf.useMedianNoise);
 
-    ImGui::SliderFloat("WF Offset (dB)", &wf.floorOffsetDb, -40.0f, 40.0f, "%.1f");
-    ImGui::SliderInt("WF Noise Window (rows)", &wf.noiseWindowN, 1, 64);
-    ImGui::Checkbox("WF Noise Median", &wf.useMedianNoise);
-
-    if (ImGui::Checkbox("WF Lock Noise", &wf.lockNoiseFloor)) {
-        if (wf.lockNoiseFloor) {
-            // lock current auto estimate as baseline
-            wf.lockedNoiseDb = wf.emaNoiseDb;
+        if (ImGui::Checkbox("WF Lock Noise", &wf.lockNoiseFloor)) {
+            if (wf.lockNoiseFloor) {
+                // lock current auto estimate as baseline
+                wf.lockedNoiseDb = wf.emaNoiseDb;
+            }
         }
-    }
 
-    ImGui::Checkbox("WF Manual Floor", &wf.manualFloor);
-    if (wf.manualFloor) {
-        ImGui::SliderFloat("WF Floor (dB)", &wf.manualFloorDb, -160.0f, -10.0f, "%.1f");
-    }
+        ImGui::Checkbox("WF Manual Floor", &wf.manualFloor);
+        if (wf.manualFloor) {
+            ImGui::SliderFloat("WF Floor (dB)", &wf.manualFloorDb, -160.0f, -10.0f, "%.1f");
+        }
 
-    if (ImGui::Button("WF Reset")) {
-        Waterfall_Reset(wf);
-    }
+        if (ImGui::Button("WF Reset")) {
+            Waterfall_Reset(wf);
+        }
 
-    // Optional debug readout (handy while tuning)
-    ImGui::Text("AutoNoise: %.1f dB  Floor: %.1f dB  Ceil: %.1f dB",
-                wf.emaNoiseDb, Waterfall_FloorDb(wf), Waterfall_CeilDb(wf));
+        // Optional debug readout (handy while tuning)
+        ImGui::Text("AutoNoise: %.1f dB  Floor: %.1f dB  Ceil: %.1f dB",
+                    wf.emaNoiseDb, Waterfall_FloorDb(wf), Waterfall_CeilDb(wf));
+    }
 }
 
 void Waterfall_DrawPlot(Waterfall& wf, const char* plotTitle, float maxHz, ImVec2 plotSize) {
@@ -228,8 +257,8 @@ void Waterfall_DrawPlot(Waterfall& wf, const char* plotTitle, float maxHz, ImVec
 
     const double x0 = 0.0;
     const double x1 = (double)maxHz;
-    const double y0 = 0.0;
-    const double y1 = (double)wf.rows;
+    const double y0 = (double)wf.rows;
+    const double y1 = 0.0;
 
     if (ImPlot::BeginPlot(plotTitle, plotSize,
         ImPlotFlags_NoLegend | ImPlotFlags_NoMenus | ImPlotFlags_NoMouseText)) {

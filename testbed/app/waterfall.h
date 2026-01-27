@@ -36,10 +36,11 @@ struct Waterfall
 
     // ---- Buffers (stored as dB values) ----
     int head = 0;                // next write row (ring)
+    int rowsWritten = 0;         // how many rows have been committed
     std::vector<float> ringDb;   // rows*bins (ring layout)
     std::vector<float> uploadDb; // rows*bins (chronological oldest->newest for PlotHeatmap)
 
-    int noiseWindowN = 20; // how many committed rows to use
+    int noiseWindowN = 10; // how many committed rows to use
     int noiseWinHead = 0;
     int noiseWinCount = 0;
     std::vector<float> noiseWinDb; // size noiseWindowN

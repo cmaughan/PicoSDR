@@ -36,6 +36,11 @@ void draw_analysis()
             {
                 continue;
             }
+        
+            if (Id.first != Channel_In)
+            {
+                continue;
+            }
 
             const auto& spectrumBuckets = pAnalysis->uiDataCache->spectrumBuckets;
             const auto& audio = pAnalysis->uiDataCache->audio;
