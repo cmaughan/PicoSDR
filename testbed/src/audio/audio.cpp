@@ -258,7 +258,7 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
                 if (ctx.m_fnCallback)
                 {
                     auto s = duration_cast<microseconds>(steady_clock::now().time_since_epoch());
-                    ctx.m_fnCallback(s /*bufferBeginAtOutput*/, outputBuffer, nBufferFrames);
+                    ctx.m_fnCallback(s /*bufferBeginAtOutput*/,inputBuffer, outputBuffer, nBufferFrames);
                 }
 
                 for (uint32_t i = 0; i < ctx.outputState.channelCount; i++)
@@ -267,19 +267,6 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
                 }
             }
 
-            if (inputBuffer && outputBuffer)
-            {
-                for (uint32_t i = 0; i < std::max(ctx.inputState.channelCount, ctx.outputState.channelCount); i++)
-                {
-                    for (unsigned long index = 0; index < nBufferFrames; index++)
-                    {
-                        auto sample = ((const float*)inputBuffer)[index];
-
-                        // Mix input to output
-                        ((float*)outputBuffer)[(index * ctx.outputState.channelCount) + i] = sample;
-                    }
-                }
-            }
         }
 
         ctx.inputState.totalFrames += nBufferFrames;

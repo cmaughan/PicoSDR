@@ -45,6 +45,9 @@ struct Waterfall
     int noiseWinCount = 0;
     std::vector<float> noiseWinDb; // size noiseWindowN
     bool useMedianNoise = true;    // median vs mean
+
+    // ---- Marker (UI) ----
+    float markerX = 0.5f; // normalized [0..1] position
 };
 
 // Lifecycle

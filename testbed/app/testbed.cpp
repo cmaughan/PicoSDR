@@ -261,11 +261,33 @@ void init()
 
     bulk_vendor_init();
 
-    audio_init([=](const std::chrono::microseconds hostTime, void* pOutput, std::size_t numSamples) {
+    audio_init([=](auto hostTime, auto pInput, auto pOutput, auto numSamples) {
         auto& ctx = GetAudioContext();
-        for (uint32_t i = 0; i < numSamples * ctx.outputState.channelCount; i++)
+
+        float* inputBuffer = (float*)pInput;
+        float* outputBuffer = (float*)pOutput;
+        if (inputBuffer && outputBuffer)
         {
-            ((float*)pOutput)[i] = 0.0f;
+            for (uint32_t i = 0; i < std::max(ctx.inputState.channelCount, ctx.outputState.channelCount); i++)
+            {
+                for (unsigned long index = 0; index < numSamples; index++)
+                {
+                    auto sample = ((const float*)inputBuffer)[index];
+
+                    // Mix input to output
+                    ((float*)outputBuffer)[(index * ctx.outputState.channelCount) + i] = sample;
+                }
+            }
+        }
+        else if (outputBuffer)
+        {
+            for (uint32_t i = 0; i < std::max(ctx.inputState.channelCount, ctx.outputState.channelCount); i++)
+            {
+                for (unsigned long index = 0; index < numSamples; index++)
+                {
+                    ((float*)outputBuffer)[(index * ctx.outputState.channelCount) + i] = 0.0f;
+                }
+            }
         }
     });
 
@@ -433,7 +455,7 @@ void draw()
         }
 
         ImGui::End();
-        
+
         if (ImGui::Begin("Waterfall", &showAudio))
         {
             draw_waterfall();

@@ -50,7 +50,7 @@ struct AudioSettings
     std::atomic<bool> enableMidi = true;
 };
 
-using AudioCB = std::function<void(const std::chrono::microseconds hostTime, void* pOutput, uint32_t frameCount)>;
+using AudioCB = std::function<void(const std::chrono::microseconds hostTime, const void* pInput, void* pOutput, uint32_t frameCount)>;
 
 struct ApiInfo
 {

@@ -255,17 +255,30 @@ void Waterfall_DrawPlot(Waterfall& wf, const char* plotTitle, float maxHz, ImVec
 
     Waterfall_BuildUpload(wf);
 
+    const float plotWidth = plotSize.x > 0.0f ? plotSize.x : ImGui::GetContentRegionAvail().x;
+    const float plotHeight = plotSize.y > 0.0f ? plotSize.y : ImGui::GetContentRegionAvail().y;
+
     const double x0 = 0.0;
     const double x1 = (double)maxHz;
     const double y0 = (double)wf.rows;
     const double y1 = 0.0;
 
-    if (ImPlot::BeginPlot(plotTitle, plotSize,
-        ImPlotFlags_NoLegend | ImPlotFlags_NoMenus | ImPlotFlags_NoMouseText)) {
-
-        ImPlot::SetupAxes("Freq", "Time", ImPlotAxisFlags_Lock, ImPlotAxisFlags_Lock);
+    ImVec2 plotPos = ImVec2(0.0f, 0.0f);
+    ImVec2 plotSizeActual = ImVec2(plotWidth, plotHeight);
+    ImVec2 plotItemMin = ImVec2(0.0f, 0.0f);
+    ImVec2 plotItemMax = ImVec2(0.0f, 0.0f);
+    if (ImPlot::BeginPlot(plotTitle, ImVec2(plotWidth, plotHeight),
+        ImPlotFlags_NoLegend | ImPlotFlags_NoMenus | ImPlotFlags_NoMouseText | ImPlotFlags_NoInputs)) {
+        ImPlot::SetupAxes("", "Time", ImPlotAxisFlags_NoLabel, ImPlotAxisFlags_Lock);
         ImPlot::SetupAxisLimits(ImAxis_X1, x0, x1, ImPlotCond_Always);
         ImPlot::SetupAxisLimits(ImAxis_Y1, y0, y1, ImPlotCond_Always);
+
+        plotPos = ImPlot::GetPlotPos();
+        plotSizeActual = ImPlot::GetPlotSize();
+
+        const double markerValue = x0 + (x1 - x0) * std::clamp<double>(wf.markerX, 0.0, 1.0);
+        const double markerWidthHz = 500.0;
+        const double markerHalfHz = markerWidthHz * 0.5;
 
         // ?Classic radio-ish? (widely available in older ImPlot)
         ImPlot::PushColormap(ImPlotColormap_Jet);
@@ -281,7 +294,72 @@ void Waterfall_DrawPlot(Waterfall& wf, const char* plotTitle, float maxHz, ImVec
             ImPlotPoint(x1, y1)
         );
 
+        const ImPlotPoint rectMin(markerValue - markerHalfHz, y0);
+        const ImPlotPoint rectMax(markerValue + markerHalfHz, y1);
+        ImPlot::PushPlotClipRect();
+        ImPlot::GetPlotDrawList()->AddRectFilled(
+            ImPlot::PlotToPixels(rectMin),
+            ImPlot::PlotToPixels(rectMax),
+            IM_COL32(255, 255, 255, 40));
+        const ImVec2 lineMin = ImPlot::PlotToPixels(ImPlotPoint(markerValue - markerHalfHz, y0));
+        const ImVec2 lineMax = ImPlot::PlotToPixels(ImPlotPoint(markerValue - markerHalfHz, y1));
+        const ImVec2 lineMin2 = ImPlot::PlotToPixels(ImPlotPoint(markerValue + markerHalfHz, y0));
+        const ImVec2 lineMax2 = ImPlot::PlotToPixels(ImPlotPoint(markerValue + markerHalfHz, y1));
+        ImPlot::GetPlotDrawList()->AddLine(lineMin, lineMax, IM_COL32(255, 255, 0, 255), 1.0f);
+        ImPlot::GetPlotDrawList()->AddLine(lineMin2, lineMax2, IM_COL32(255, 255, 0, 255), 1.0f);
+        ImPlot::PopPlotClipRect();
+
+        if (ImPlot::IsPlotHovered() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+            ImGui::SetMouseCursor(ImGuiMouseCursor_Arrow);
+            const ImPlotPoint mouse = ImPlot::GetPlotMousePos();
+            const double t = (mouse.x - x0) / (x1 - x0);
+            wf.markerX = std::clamp(static_cast<float>(t), 0.0f, 1.0f);
+        }
+
         ImPlot::PopColormap();
         ImPlot::EndPlot();
+        plotItemMin = ImGui::GetItemRectMin();
+        plotItemMax = ImGui::GetItemRectMax();
     }
+
+    // Capture drag over the plot area so the window doesn't move
+    if (plotSizeActual.x > 0.0f && plotSizeActual.y > 0.0f) {
+        ImGui::SetCursorScreenPos(plotPos);
+        ImGui::InvisibleButton("##wf_plot_drag", plotSizeActual);
+        if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+            ImGui::SetMouseCursor(ImGuiMouseCursor_Arrow);
+            const float t = (ImGui::GetIO().MousePos.x - plotPos.x) / plotSizeActual.x;
+            wf.markerX = std::clamp(t, 0.0f, 1.0f);
+        }
+    }
+
+    // Custom marker strip under the plot
+    const float stripHeight = 24.0f;
+    const float stripY = plotItemMax.y + ImGui::GetStyle().ItemSpacing.y;
+    ImGui::SetCursorScreenPos(ImVec2(plotPos.x, stripY));
+    ImGui::InvisibleButton("##wf_marker_strip", ImVec2(plotSizeActual.x, stripHeight));
+    const ImVec2 stripMin = ImGui::GetItemRectMin();
+    const ImVec2 stripMax = ImGui::GetItemRectMax();
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    drawList->AddRectFilled(stripMin, stripMax, IM_COL32(18, 18, 18, 255));
+    drawList->AddRect(stripMin, stripMax, IM_COL32(60, 60, 60, 255));
+
+    if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        const float t = (ImGui::GetIO().MousePos.x - stripMin.x) / (stripMax.x - stripMin.x);
+        wf.markerX = std::clamp(t, 0.0f, 1.0f);
+    }
+    if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+        const float t = (ImGui::GetIO().MousePos.x - stripMin.x) / (stripMax.x - stripMin.x);
+        wf.markerX = std::clamp(t, 0.0f, 1.0f);
+    }
+
+    const float markerX = stripMin.x + wf.markerX * (stripMax.x - stripMin.x);
+    const float tipY = stripMin.y + 4.0f;
+    const float baseY = stripMax.y - 4.0f;
+    const float halfWidth = 6.0f;
+    drawList->AddTriangleFilled(
+        ImVec2(markerX, tipY),
+        ImVec2(markerX - halfWidth, baseY),
+        ImVec2(markerX + halfWidth, baseY),
+        IM_COL32(220, 220, 220, 255));
 }
