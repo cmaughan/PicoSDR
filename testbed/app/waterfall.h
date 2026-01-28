@@ -67,3 +67,6 @@ float Waterfall_CeilDb(const Waterfall& wf);
 // UI + draw (ImGui + ImPlot)
 void Waterfall_DrawControls(Waterfall& wf);
 void Waterfall_DrawPlot(Waterfall& wf, const char* plotTitle, float maxHz, ImVec2 plotSize);
+
+// Shared marker access
+Waterfall& Waterfall_Get();

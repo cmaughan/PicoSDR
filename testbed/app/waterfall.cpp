@@ -178,7 +178,7 @@ void Waterfall_BuildUpload(Waterfall& wf) {
     if (wf.uploadDb.size() != wf.ringDb.size())
         wf.uploadDb.resize(wf.ringDb.size());
 
-    // Newest row at bottom (y=0). Older rows move upward.
+    // Newest row starts at top and moves downward as rows arrive.
     if (wf.rowsWritten <= 0) {
         const float fill = Waterfall_FloorDb(wf);
         std::fill(wf.uploadDb.begin(), wf.uploadDb.end(), fill);
@@ -187,16 +187,19 @@ void Waterfall_BuildUpload(Waterfall& wf) {
 
     const int newestRow = (wf.head - 1 + wf.rows) % wf.rows;
     for (int y = 0; y < wf.rows; ++y) {
-        if (y >= wf.rowsWritten) {
-            const float fill = Waterfall_FloorDb(wf);
-            float* dst = wf.uploadDb.data() + size_t(y) * size_t(wf.bins);
-            std::fill(dst, dst + wf.bins, fill);
-            continue;
+        const float* src = nullptr;
+        if (y < wf.rowsWritten) {
+            const int ringRow = (newestRow - y + wf.rows) % wf.rows;
+            src = wf.ringDb.data() + size_t(ringRow) * size_t(wf.bins);
         }
-        const int ringRow = (newestRow - y + wf.rows) % wf.rows;
-        const float* src = wf.ringDb.data() + size_t(ringRow) * size_t(wf.bins);
+
         float* dst = wf.uploadDb.data() + size_t(y) * size_t(wf.bins);
-        std::memcpy(dst, src, size_t(wf.bins) * sizeof(float));
+        if (src) {
+            std::memcpy(dst, src, size_t(wf.bins) * sizeof(float));
+        } else {
+            const float fill = Waterfall_FloorDb(wf);
+            std::fill(dst, dst + wf.bins, fill);
+        }
     }
 }
 
@@ -268,8 +271,8 @@ void Waterfall_DrawPlot(Waterfall& wf, const char* plotTitle, float maxHz, ImVec
     ImVec2 plotItemMin = ImVec2(0.0f, 0.0f);
     ImVec2 plotItemMax = ImVec2(0.0f, 0.0f);
     if (ImPlot::BeginPlot(plotTitle, ImVec2(plotWidth, plotHeight),
-        ImPlotFlags_NoLegend | ImPlotFlags_NoMenus | ImPlotFlags_NoMouseText | ImPlotFlags_NoInputs)) {
-        ImPlot::SetupAxes("", "Time", ImPlotAxisFlags_NoLabel, ImPlotAxisFlags_Lock);
+        ImPlotFlags_NoLegend | ImPlotFlags_NoMenus | ImPlotFlags_NoMouseText | ImPlotFlags_NoInputs | ImPlotFlags_NoTitle)) {
+        ImPlot::SetupAxes("", "", ImPlotAxisFlags_NoLabel, ImPlotAxisFlags_Lock | ImPlotAxisFlags_NoLabel | ImPlotAxisFlags_NoTickLabels);
         ImPlot::SetupAxisLimits(ImAxis_X1, x0, x1, ImPlotCond_Always);
         ImPlot::SetupAxisLimits(ImAxis_Y1, y0, y1, ImPlotCond_Always);
 
@@ -283,10 +286,20 @@ void Waterfall_DrawPlot(Waterfall& wf, const char* plotTitle, float maxHz, ImVec
         // ?Classic radio-ish? (widely available in older ImPlot)
         ImPlot::PushColormap(ImPlotColormap_Jet);
 
+        const int rows = wf.rows;
+        const int bins = wf.bins;
+        static thread_local std::vector<float> plotRowsFlipped;
+        plotRowsFlipped.resize(size_t(rows) * size_t(bins));
+        for (int y = 0; y < rows; ++y) {
+            const float* src = wf.uploadDb.data() + size_t(y) * size_t(bins);
+            float* dst = plotRowsFlipped.data() + size_t(rows - 1 - y) * size_t(bins);
+            std::memcpy(dst, src, size_t(bins) * sizeof(float));
+        }
+
         ImPlot::PlotHeatmap(
             "##wf",
-            wf.uploadDb.data(),
-            wf.rows, wf.bins,
+            plotRowsFlipped.data(),
+            rows, bins,
             Waterfall_FloorDb(wf),
             Waterfall_CeilDb(wf),
             nullptr,

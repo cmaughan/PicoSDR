@@ -450,14 +450,13 @@ void draw()
             }
             ImGui::EndDisabled();
 
-            ImGui::SeparatorText("Analysis");
-            draw_analysis();
         }
 
         ImGui::End();
 
         if (ImGui::Begin("Waterfall", &showAudio))
         {
+            draw_analysis();
             draw_waterfall();
         }
         ImGui::End();

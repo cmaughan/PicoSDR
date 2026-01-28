@@ -21,13 +21,19 @@ using namespace libremidi;
 
 namespace
 {
-Waterfall wf;
+}
+
+Waterfall& Waterfall_Get()
+{
+    static Waterfall wf;
+    return wf;
 }
 
 void draw_waterfall()
 {
     PROFILE_SCOPE(draw_waterfall)
     auto& ctx = GetAudioContext();
+    auto& wf = Waterfall_Get();
 
     const size_t bufferWidth = 512; // default width if no data
     const auto BufferTypes = 2;     // Spectrum + Audio
@@ -61,8 +67,8 @@ void draw_waterfall()
 
             Waterfall_AccumulateMag(wf, spectrumBuckets.data(), int(bucketCount));
 
-            Waterfall_DrawControls(wf);
             Waterfall_DrawPlot(wf, "Waterfall", float(bucketCount * sampleCount), ImVec2(-1, 600));
+            Waterfall_DrawControls(wf);
         }
     }
 }
