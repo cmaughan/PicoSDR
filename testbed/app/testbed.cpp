@@ -494,6 +494,7 @@ void draw()
                     auto input = file_read(filePath);
                     ctx.inputStreamOverride.resize(input.size() / 4);
                     ctx.inputStreamIndex = 0;
+                    ctx.inputState.channelCount = 1; // hack
                     memcpy(ctx.inputStreamOverride.data(), input.data(), input.size());
                 }
             }

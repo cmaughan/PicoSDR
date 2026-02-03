@@ -338,6 +338,7 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
 
         if (inputBuffer && !ctx.inputStreamOverride.empty())
         {
+            ctx.inputState.channelCount = 1; // hack
             if ((ctx.inputStreamIndex + nBufferFrames) >= ctx.inputStreamOverride.size())
             {
                 ctx.inputStreamIndex = 0;
