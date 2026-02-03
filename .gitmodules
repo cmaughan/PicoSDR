@@ -1,0 +1,27 @@
+[submodule "target/external/tinyusb"]
+	path = target/external/tinyusb
+	url = https://github.com/hathach/tinyusb.git
+[submodule "target/external/tinyusb_fork"]
+	path = target/external/tinyusb_fork
+	url = https://github.com/cmaughan/tinyusb.git
+[submodule "shared/external/vcpkg"]
+	path = shared/external/vcpkg
+	url = https://github.com/Microsoft/vcpkg
+[submodule "shared/external/tsf"]
+	path = shared/external/tsf
+	url = https://github.com/schellingb/TinySoundFont.git
+[submodule "shared/external/remidi"]
+	path = shared/external/remidi
+	url = https://github.com/jcelerier/libremidi.git
+[submodule "target/external/zest"]
+	path = target/external/zest
+	url = https://github.com/Rezonality/zest
+[submodule "target/external/glm"]
+	path = target/external/glm
+	url = https://github.com/g-truc/glm
+[submodule "target/external/dragonbox"]
+	path = target/external/dragonbox
+	url = https://github.com/cmaughan/dragonbox.git
+[submodule "shared/external/libusb"]
+	path = shared/external/libusb
+	url = https://github.com/cmaughan/libusb-cmake
