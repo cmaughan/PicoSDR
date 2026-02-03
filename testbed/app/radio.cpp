@@ -40,6 +40,8 @@ struct RadioFftState
     uint32_t totalBins = 0;
     double cachedBinHz = 0.0;
     double cachedWidthHz = 0.0;
+    float cachedFalloff = 0.0f;
+    float cachedSkirtRatio = 0.0f;
 
     float agcGain = 1.0f;
     float agcPower = 0.0f;
@@ -63,49 +65,64 @@ std::vector<uint32_t> build_bucket_edges(uint32_t limit, uint32_t buckets)
     return edges;
 }
 
-double marker_center_hz(float markerX)
+double marker_center_bin(float markerX)
 {
     auto& ctx = GetAudioContext();
     const uint32_t frames = std::max(2u, ctx.audioAnalysisSettings.frames);
     const uint32_t spectrumSamples = (frames / 2) + 1;
     const uint32_t buckets = std::max(1u, ctx.audioAnalysisSettings.spectrumBuckets);
     const auto edges = build_bucket_edges(spectrumSamples, buckets);
-    const int bucketIndex = std::clamp(int(markerX * float(buckets - 1)), 0, int(buckets - 1));
+    float bucketPos = markerX * float(buckets);
+    bucketPos = std::clamp(bucketPos, 0.0f, std::nextafter(float(buckets), 0.0f));
+    const int bucketIndex = std::clamp(int(bucketPos), 0, int(buckets - 1));
+    const float bucketFrac = std::clamp(bucketPos - float(bucketIndex), 0.0f, 1.0f);
 
     uint32_t startBin = (bucketIndex == 0) ? 1u : edges[std::max(0, bucketIndex - 1)];
     uint32_t endBin = edges[std::min<int>(bucketIndex, int(edges.size() - 1))];
     if (endBin < startBin)
         std::swap(endBin, startBin);
 
-    const double centerBin = (double(startBin) + double(endBin)) * 0.5;
+    const double span = std::max(1.0, double(endBin) - double(startBin));
+    return double(startBin) + (double(bucketFrac) * span);
+}
+
+double marker_center_hz(float markerX)
+{
+    auto& ctx = GetAudioContext();
+    const uint32_t frames = std::max(2u, ctx.audioAnalysisSettings.frames);
+    const double centerBin = marker_center_bin(markerX);
     return centerBin * double(ctx.audioDeviceSettings.sampleRate) / double(frames);
 }
 
 
-void ensure_skirt_weights(double binHz, double widthHz)
+void ensure_skirt_weights(double binHz, double widthHz, float skirtWidthRatio, float falloff)
 {
-    const double skirtWidthHz = widthHz * 0.5;
+    const double skirtWidthHz = widthHz * std::max(0.01f, skirtWidthRatio);
     const uint32_t passBins = std::max(1u, uint32_t(std::round(widthHz / binHz)));
     const uint32_t skirtBins = std::max(1u, uint32_t(std::round(skirtWidthHz / binHz)));
     const uint32_t totalBins = passBins + (2u * skirtBins);
 
-    if (g_fft.cachedBinHz == binHz && g_fft.cachedWidthHz == widthHz && g_fft.totalBins == totalBins)
+    if (g_fft.cachedBinHz == binHz && g_fft.cachedWidthHz == widthHz && g_fft.cachedSkirtRatio == skirtWidthRatio && g_fft.cachedFalloff == falloff && g_fft.totalBins == totalBins)
         return;
 
     g_fft.cachedBinHz = binHz;
     g_fft.cachedWidthHz = widthHz;
+    g_fft.cachedSkirtRatio = skirtWidthRatio;
+    g_fft.cachedFalloff = falloff;
     g_fft.passBins = passBins;
     g_fft.skirtBins = skirtBins;
     g_fft.totalBins = totalBins;
     g_fft.skirtWeights.assign(totalBins, 0.0f);
 
+    const float sigmaBins = std::max(1e-3f, float(skirtBins) / std::max(0.1f, falloff));
     for (uint32_t i = 0; i < totalBins; ++i)
     {
         float gain = 0.0f;
         if (i < skirtBins)
         {
-            const double t = double(i) / double(skirtBins);
-            gain = float(0.5 - 0.5 * std::cos(3.14159265358979323846 * t));
+            const float d = float(skirtBins - 1u - i);
+            const float x = d / sigmaBins;
+            gain = std::exp(-0.5f * x * x);
         }
         else if (i < skirtBins + passBins)
         {
@@ -114,8 +131,9 @@ void ensure_skirt_weights(double binHz, double widthHz)
         else
         {
             const uint32_t tail = i - (skirtBins + passBins);
-            const double t = double(skirtBins - tail) / double(skirtBins);
-            gain = float(0.5 - 0.5 * std::cos(3.14159265358979323846 * t));
+            const float d = float(tail);
+            const float x = d / sigmaBins;
+            gain = std::exp(-0.5f * x * x);
         }
         g_fft.skirtWeights[i] = gain;
     }
@@ -200,9 +218,7 @@ void apply_bandpass_filter()
     const double sampleRate = double(ctx.audioDeviceSettings.sampleRate);
     const double maxHz = sampleRate * 0.5;
     const double markerCenterHz = marker_center_hz(wf.markerX);
-    const double markerWidthHz = std::max(1.0, double(GetRadioSettings().markerWidthHz));
     const double binHz = maxHz / double(g_fft.fftSize / 2);
-    ensure_skirt_weights(binHz, markerWidthHz);
 
     const double centerBin = markerCenterHz / binHz;
     const double targetCenterHz = 750.0;
@@ -347,6 +363,23 @@ void apply_output_agc_block(std::vector<float>& block)
 
 } // namespace
 
+bool radio_get_bandpass_skirt(RadioBandpassSkirtView& out)
+{
+    if (g_fft.skirtWeights.empty() || g_fft.totalBins == 0)
+        return false;
+
+    const double centerBin = marker_center_bin(Waterfall_Get().markerX);
+    const double lowSkirtBin = std::floor(centerBin - (double(g_fft.totalBins) * 0.5));
+    const double centerIndex = centerBin - lowSkirtBin;
+
+    out.weights = g_fft.skirtWeights.data();
+    out.totalBins = g_fft.totalBins;
+    out.passBins = g_fft.passBins;
+    out.skirtBins = g_fft.skirtBins;
+    out.centerIndex = float(std::clamp(centerIndex, 0.0, double(std::max<uint32_t>(1u, g_fft.totalBins) - 1)));
+    return true;
+}
+
 void radio_process(const std::chrono::microseconds time, const float* pInput, float* pOutput, uint32_t sampleCount)
 {
     PROFILE_SCOPE(radio_process);
@@ -405,6 +438,16 @@ void radio_process(const std::chrono::microseconds time, const float* pInput, fl
                 }
 
                 kiss_fft(g_fft.cfgFwd, g_fft.fftInCpx.data(), g_fft.fftOut.data());
+
+                {
+                    const double sampleRate = double(ctx.audioDeviceSettings.sampleRate);
+                    const double maxHz = sampleRate * 0.5;
+                    const double binHz = maxHz / double(g_fft.fftSize / 2);
+                    const double markerWidthHz = std::max(1.0, double(settings.markerWidthHz));
+                    const float skirtWidthRatio = std::max(0.1f, settings.skirtWidthRatio);
+                    const float skirtFalloff = std::max(0.1f, settings.skirtFalloff);
+                    ensure_skirt_weights(binHz, markerWidthHz, skirtWidthRatio, skirtFalloff);
+                }
 
                 if (settings.enableFilter)
                 {

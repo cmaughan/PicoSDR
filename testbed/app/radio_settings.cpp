@@ -35,6 +35,8 @@ RadioSettings radio_settings_load_settings(const toml::table& settings)
         radioSettings.fftHopDiv = read_u32("radio_fft_hop_div", radioSettings.fftHopDiv);
         radioSettings.enableFilter = read_bool("radio_enable_filter", radioSettings.enableFilter);
         radioSettings.markerWidthHz = read_float("radio_bandwidth_hz", radioSettings.markerWidthHz);
+        radioSettings.skirtWidthRatio = read_float("radio_skirt_width_ratio", radioSettings.skirtWidthRatio);
+        radioSettings.skirtFalloff = read_float("radio_skirt_falloff", radioSettings.skirtFalloff);
         radioSettings.inputAgc.targetDb = read_float("radio_agc_target", radioSettings.inputAgc.targetDb);
         radioSettings.inputAgc.attackMs = read_float("radio_agc_attack", radioSettings.inputAgc.attackMs);
         radioSettings.inputAgc.releaseMs = read_float("radio_agc_release", radioSettings.inputAgc.releaseMs);
@@ -59,6 +61,8 @@ toml::table radio_settings_save_settings(const RadioSettings& settings)
     tab.insert_or_assign("radio_fft_hop_div", int(settings.fftHopDiv));
     tab.insert_or_assign("radio_enable_filter", settings.enableFilter);
     tab.insert_or_assign("radio_bandwidth_hz", settings.markerWidthHz);
+    tab.insert_or_assign("radio_skirt_width_ratio", settings.skirtWidthRatio);
+    tab.insert_or_assign("radio_skirt_falloff", settings.skirtFalloff);
     tab.insert_or_assign("radio_agc_target", settings.inputAgc.targetDb);
     tab.insert_or_assign("radio_agc_attack", settings.inputAgc.attackMs);
     tab.insert_or_assign("radio_agc_release", settings.inputAgc.releaseMs);
@@ -83,6 +87,8 @@ void radio_settings_validate_settings(RadioSettings& settings)
         settings.fftHopDiv = v;
     }
     settings.markerWidthHz = std::clamp(settings.markerWidthHz, 50.0f, 3000.0f);
+    settings.skirtWidthRatio = std::clamp(settings.skirtWidthRatio, 0.1f, 2.0f);
+    settings.skirtFalloff = std::clamp(settings.skirtFalloff, 0.1f, 10.0f);
     auto validate_agc = [](RadioSettings::AgcSettings& agc) {
         if (agc.targetDb > 0.0f)
         {

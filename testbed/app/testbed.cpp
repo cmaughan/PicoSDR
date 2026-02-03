@@ -541,6 +541,45 @@ void draw()
                     {
                         radioSettings.outputGain = outputGain;
                     }
+
+                    float skirtFalloff = radioSettings.skirtFalloff;
+                    if (ImGui::SliderFloat("Skirt Falloff##bandpass_skirt_falloff", &skirtFalloff, 0.1f, 10.0f, "%.2f"))
+                    {
+                        radioSettings.skirtFalloff = skirtFalloff;
+                    }
+
+                    float skirtWidthRatio = radioSettings.skirtWidthRatio;
+                    if (ImGui::SliderFloat("Skirt Width##bandpass_skirt_width", &skirtWidthRatio, 0.1f, 2.0f, "%.2f"))
+                    {
+                        radioSettings.skirtWidthRatio = skirtWidthRatio;
+                    }
+
+                    RadioBandpassSkirtView skirtView{};
+                    if (radio_get_bandpass_skirt(skirtView) && skirtView.totalBins > 0)
+                    {
+                        static std::vector<float> xs;
+                        xs.resize(skirtView.totalBins);
+                        for (uint32_t i = 0; i < skirtView.totalBins; ++i)
+                        {
+                            xs[i] = float(i);
+                        }
+
+                        if (ImPlot::BeginPlot("Skirt##bandpass_skirt", ImVec2(-1, 80),
+                            ImPlotFlags_NoLegend | ImPlotFlags_NoFrame | ImPlotFlags_NoMenus | ImPlotFlags_NoMouseText | ImPlotFlags_NoInputs | ImPlotFlags_NoTitle))
+                        {
+                            ImPlot::SetupAxes("", "", ImPlotAxisFlags_NoLabel, ImPlotAxisFlags_NoLabel | ImPlotAxisFlags_NoTickLabels | ImPlotAxisFlags_Lock);
+                            ImPlot::SetupAxisLimits(ImAxis_X1, 0.0, double(std::max<uint32_t>(1u, skirtView.totalBins - 1)), ImPlotCond_Always);
+                            ImPlot::SetupAxisLimits(ImAxis_Y1, 0.0, 1.05, ImPlotCond_Always);
+                            ImPlot::PlotShaded("Skirt", xs.data(), skirtView.weights, int(skirtView.totalBins), 0.0f);
+                            const float centerX = skirtView.centerIndex;
+                            const float lineX[2] = {centerX, centerX};
+                            const float lineY[2] = {0.0f, 1.05f};
+                            ImPlot::PushStyleColor(ImPlotCol_Line, IM_COL32(255, 255, 255, 200));
+                            ImPlot::PlotLine("Center", lineX, lineY, 2);
+                            ImPlot::PopStyleColor();
+                            ImPlot::EndPlot();
+                        }
+                    }
                 }
 
                 if (ImGui::CollapsingHeader("Input AGC", ImGuiTreeNodeFlags_None))
