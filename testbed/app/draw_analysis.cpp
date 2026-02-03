@@ -1,6 +1,8 @@
 
 #include "testbed.h"
 #include "pch.h"
+#include "radio.h"
+#include "radio_settings.h"
 
 #include <algorithm>
 #include <deque>
@@ -14,6 +16,8 @@
 
 #include <implot.h>
 
+double radio_marker_center_hz();
+
 using namespace Zing;
 using namespace Zest;
 using namespace std::chrono;
@@ -24,7 +28,8 @@ namespace
 void draw_spectrum_plot(const Zing::ChannelId& Id,
                         const std::vector<float>& spectrumBuckets,
                         float sampleRate,
-                        bool showFilterBox)
+                        bool showFilterBox,
+                        float maxHz)
 {
     if (spectrumBuckets.empty())
         return;
@@ -44,12 +49,14 @@ void draw_spectrum_plot(const Zing::ChannelId& Id,
 
     ImVec2 plotPos(0.0f, 0.0f);
     ImVec2 plotSize(0.0f, 0.0f);
+    const float fullMaxHz = float(bucketCount * sampleCount);
+    const float plotMaxHz = (maxHz > 0.0f) ? std::min(maxHz, fullMaxHz) : fullMaxHz;
     if (ImPlot::BeginPlot(std::format("Spectrum: {}", audio_to_channel_name(Id)).c_str(), ImVec2(-1, 0),
         ImPlotFlags_Crosshairs | ImPlotFlags_NoLegend | ImPlotFlags_NoFrame | ImPlotFlags_NoInputs))
     {
         ImPlot::SetupAxes("", "", ImPlotAxisFlags_Lock | ImPlotAxisFlags_NoLabel | ImPlotAxisFlags_NoTickLabels,
             ImPlotAxisFlags_NoLabel | ImPlotAxisFlags_NoTickLabels | ImPlotAxisFlags_NoGridLines);
-        ImPlot::SetupAxisLimits(ImAxis_X1, 0.0f, float(bucketCount * sampleCount), ImPlotCond_Always);
+        ImPlot::SetupAxisLimits(ImAxis_X1, 0.0f, plotMaxHz, ImPlotCond_Always);
         ImPlot::SetupAxisLimits(ImAxis_Y1, 0.0f, 1.0f, ImPlotCond_Always);
         plotPos = ImPlot::GetPlotPos();
         plotSize = ImPlot::GetPlotSize();
@@ -58,9 +65,7 @@ void draw_spectrum_plot(const Zing::ChannelId& Id,
         if (showFilterBox)
         {
             auto& wf = Waterfall_Get();
-            const double x0 = 0.0;
-            const double x1 = double(bucketCount * sampleCount);
-            const double markerValue = x0 + (x1 - x0) * std::clamp<double>(wf.markerX, 0.0, 1.0);
+            const double markerValue = std::clamp<double>(radio_marker_center_hz(), 0.0, double(plotMaxHz));
             const double markerWidthHz = std::max(1.0, double(wf.markerWidthHz));
             const double markerHalfHz = markerWidthHz * 0.5;
 
@@ -162,7 +167,7 @@ void draw_analysis()
             {
                 if (i == 1)
                 {
-                    draw_spectrum_plot(Id, spectrumBuckets, float(ctx.audioDeviceSettings.sampleRate), true);
+                    draw_spectrum_plot(Id, spectrumBuckets, float(ctx.audioDeviceSettings.sampleRate), true, 0.0f);
                 }
                 else
                 {
@@ -213,7 +218,9 @@ void draw_output_analysis()
         draw_audio_plot(outputId, audio);
 
         ImGui::TableSetColumnIndex(1);
-        draw_spectrum_plot(outputId, spectrumBuckets, float(ctx.audioDeviceSettings.sampleRate), false);
+        const float bandHz = std::max(1.0f, GetRadioSettings().markerWidthHz);
+        const float plotHz = std::max(1500.0f, bandHz);
+        draw_spectrum_plot(outputId, spectrumBuckets, float(ctx.audioDeviceSettings.sampleRate), false, plotHz);
 
         ImGui::EndTable();
     }

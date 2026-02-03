@@ -221,7 +221,7 @@ void apply_bandpass_filter()
     const double binHz = maxHz / double(g_fft.fftSize / 2);
 
     const double centerBin = markerCenterHz / binHz;
-    const double targetCenterHz = 750.0;
+    const double targetCenterHz = double(GetRadioSettings().targetCenterHz);
     const double targetCenterBin = targetCenterHz / binHz;
     const int64_t lowSkirtBin = int64_t(std::floor(centerBin - (double(g_fft.totalBins) * 0.5)));
     const int64_t shiftBins = int64_t(std::llround(targetCenterBin - centerBin));
@@ -362,6 +362,11 @@ void apply_output_agc_block(std::vector<float>& block)
 }
 
 } // namespace
+
+double radio_marker_center_hz()
+{
+    return marker_center_hz(Waterfall_Get().markerX);
+}
 
 bool radio_get_bandpass_skirt(RadioBandpassSkirtView& out)
 {

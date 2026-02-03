@@ -14,6 +14,7 @@ struct RadioSettings
     uint32_t fftHopDiv = 2; // hop = frames / hopDiv (2 = 50% overlap)
     bool enableFilter = true;
     float markerWidthHz = 500.0f;
+    float targetCenterHz = 750.0f;
     float skirtWidthRatio = 0.5f;
     float skirtFalloff = 1.0f;
     float outputGain = 10.0f;

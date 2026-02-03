@@ -14,3 +14,4 @@ struct RadioBandpassSkirtView
 };
 
 bool radio_get_bandpass_skirt(RadioBandpassSkirtView& out);
+double radio_marker_center_hz();

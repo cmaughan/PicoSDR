@@ -542,6 +542,12 @@ void draw()
                         radioSettings.outputGain = outputGain;
                     }
 
+                    float targetCenterHz = radioSettings.targetCenterHz;
+                    if (ImGui::SliderFloat("Target Center (Hz)##bandpass_target_center", &targetCenterHz, 0.0f, 1000.0f, "%.0f"))
+                    {
+                        radioSettings.targetCenterHz = targetCenterHz;
+                    }
+
                     float skirtFalloff = radioSettings.skirtFalloff;
                     if (ImGui::SliderFloat("Skirt Falloff##bandpass_skirt_falloff", &skirtFalloff, 0.1f, 10.0f, "%.2f"))
                     {
