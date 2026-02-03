@@ -502,6 +502,10 @@ void draw()
             {
                 auto& radioSettings = GetRadioSettings();
                 Waterfall_Get().markerWidthHz = radioSettings.markerWidthHz;
+                auto agc_bar = [](float power) {
+                    const float db = 10.0f * std::log10(std::max(power, 1e-12f));
+                    return std::clamp((db + 80.0f) / 80.0f, 0.0f, 1.0f);
+                };
                 if (ImGui::CollapsingHeader("Band Pass Filter", ImGuiTreeNodeFlags_None))
                 {
                     int hopDivOptions[] = {1, 2, 4, 8};
@@ -564,9 +568,15 @@ void draw()
                     }
 
                     const float agcPower = ctx.radioAgcPower.load(std::memory_order_relaxed);
+                    const float agcPowerOut = ctx.radioAgcPowerOut.load(std::memory_order_relaxed);
                     const float agcPowerDb = 10.0f * std::log10(std::max(agcPower, 1e-12f));
                     ImGui::Separator();
-                    ImGui::Text("Power: %.6f", agcPower);
+                    ImGui::PushStyleColor(ImGuiCol_PlotHistogram, IM_COL32(255, 215, 0, 255));
+                    ImGui::ProgressBar(agc_bar(agcPower), ImVec2(-1.0f, 6.0f), "");
+                    ImGui::PopStyleColor();
+                    ImGui::PushStyleColor(ImGuiCol_PlotHistogram, IM_COL32(0, 200, 0, 255));
+                    ImGui::ProgressBar(agc_bar(agcPowerOut), ImVec2(-1.0f, 6.0f), "");
+                    ImGui::PopStyleColor();
                     ImGui::Text("Power (dB): %.1f", agcPowerDb);
                 }
 
@@ -592,6 +602,17 @@ void draw()
                     {
                         radioSettings.outputAgc.releaseMs = outAgcRelease;
                     }
+                    const float outAgcPower = ctx.radioOutAgcPower.load(std::memory_order_relaxed);
+                    const float outAgcPowerOut = ctx.radioOutAgcPowerOut.load(std::memory_order_relaxed);
+                    const float outAgcPowerDb = 10.0f * std::log10(std::max(outAgcPower, 1e-12f));
+                    ImGui::Separator();
+                    ImGui::PushStyleColor(ImGuiCol_PlotHistogram, IM_COL32(255, 215, 0, 255));
+                    ImGui::ProgressBar(agc_bar(outAgcPower), ImVec2(-1.0f, 6.0f), "");
+                    ImGui::PopStyleColor();
+                    ImGui::PushStyleColor(ImGuiCol_PlotHistogram, IM_COL32(0, 200, 0, 255));
+                    ImGui::ProgressBar(agc_bar(outAgcPowerOut), ImVec2(-1.0f, 6.0f), "");
+                    ImGui::PopStyleColor();
+                    ImGui::Text("Power (dB): %.1f", outAgcPowerDb);
                 }
             }
 

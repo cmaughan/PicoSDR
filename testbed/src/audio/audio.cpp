@@ -105,6 +105,15 @@ void apply_output_compressor(float* outputBuffer, uint32_t frames, uint32_t chan
 
     PROFILE_SCOPE(apply_output_compressor);
 
+    double inSum = 0.0;
+    double outSum = 0.0;
+    const uint32_t sampleCount = frames * channels;
+    for (uint32_t i = 0; i < sampleCount; ++i)
+    {
+        const double v = outputBuffer[i];
+        inSum += v * v;
+    }
+
     ensure_output_compressor(channels, ctx.outputState.sampleRate);
     if (g_outputComp.comps.empty())
         return;
@@ -134,6 +143,15 @@ void apply_output_compressor(float* outputBuffer, uint32_t frames, uint32_t chan
             outputBuffer[idx] = float(out);
         }
     }
+
+    for (uint32_t i = 0; i < sampleCount; ++i)
+    {
+        const double v = outputBuffer[i];
+        outSum += v * v;
+    }
+    const double denom = std::max<uint32_t>(1u, sampleCount);
+    ctx.radioCompPower.store(float(inSum / denom), std::memory_order_relaxed);
+    ctx.radioCompPowerOut.store(float(outSum / denom), std::memory_order_relaxed);
 }
 
 } // namespace
@@ -1081,6 +1099,20 @@ void audio_show_settings_gui()
             {
                 analysisSettings.compRelease = compRelease;
             }
+
+            auto comp_bar = [](float power) {
+                const float db = 10.0f * std::log10(std::max(power, 1e-12f));
+                return std::clamp((db + 80.0f) / 80.0f, 0.0f, 1.0f);
+            };
+            const float compPower = ctx.radioCompPower.load(std::memory_order_relaxed);
+            const float compPowerOut = ctx.radioCompPowerOut.load(std::memory_order_relaxed);
+            ImGui::Separator();
+            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, IM_COL32(255, 215, 0, 255));
+            ImGui::ProgressBar(comp_bar(compPower), ImVec2(-1.0f, 6.0f), "");
+            ImGui::PopStyleColor();
+            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, IM_COL32(0, 200, 0, 255));
+            ImGui::ProgressBar(comp_bar(compPowerOut), ImVec2(-1.0f, 6.0f), "");
+            ImGui::PopStyleColor();
         }
 
         if (ImGui::CollapsingHeader("Waterfall", ImGuiTreeNodeFlags_None))

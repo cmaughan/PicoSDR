@@ -224,6 +224,11 @@ struct AudioContext
     uint32_t inputStreamIndex = 0;
 
     std::atomic<float> radioAgcPower = 0.0f;
+    std::atomic<float> radioAgcPowerOut = 0.0f;
+    std::atomic<float> radioOutAgcPower = 0.0f;
+    std::atomic<float> radioOutAgcPowerOut = 0.0f;
+    std::atomic<float> radioCompPower = 0.0f;
+    std::atomic<float> radioCompPowerOut = 0.0f;
 };
 
 AudioContext& GetAudioContext();

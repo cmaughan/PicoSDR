@@ -256,6 +256,7 @@ void apply_agc_block(const std::vector<float>& input,
                      float& agcPower,
                      float& agcGain,
                      std::atomic<float>* powerOut,
+                     std::atomic<float>* powerOutPost,
                      std::vector<float>* applyBlock)
 {
     if (input.empty())
@@ -316,6 +317,11 @@ void apply_agc_block(const std::vector<float>& input,
     const float gainCoeff = desired < agcGain ? attack : release;
     agcGain = agcGain + gainCoeff * float(desired - agcGain);
 
+    if (powerOutPost)
+    {
+        powerOutPost->store(agcPower * (agcGain * agcGain), std::memory_order_relaxed);
+    }
+
     if (applyBlock)
     {
         for (float& sample : *applyBlock)
@@ -329,13 +335,14 @@ void apply_input_agc(const std::vector<float>& input)
 {
     PROFILE_SCOPE(apply_input_agc);
     auto& ctx = GetAudioContext();
-    apply_agc_block(input, GetRadioSettings().inputAgc, g_fft.agcPower, g_fft.agcGain, &ctx.radioAgcPower, nullptr);
+    apply_agc_block(input, GetRadioSettings().inputAgc, g_fft.agcPower, g_fft.agcGain, &ctx.radioAgcPower, &ctx.radioAgcPowerOut, nullptr);
 }
 
 void apply_output_agc_block(std::vector<float>& block)
 {
     PROFILE_SCOPE(apply_output_agc);
-    apply_agc_block(block, GetRadioSettings().outputAgc, g_fft.outAgcPower, g_fft.outAgcGain, nullptr, &block);
+    auto& ctx = GetAudioContext();
+    apply_agc_block(block, GetRadioSettings().outputAgc, g_fft.outAgcPower, g_fft.outAgcGain, &ctx.radioOutAgcPower, &ctx.radioOutAgcPowerOut, &block);
 }
 
 } // namespace
