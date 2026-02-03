@@ -279,8 +279,18 @@ void apply_agc_block(const std::vector<float>& input,
     if (!std::isfinite(avgPower))
         return;
 
-    const float attack = settings.attack;
-    const float release = settings.release;
+    auto& ctx = GetAudioContext();
+    const float sampleRate = applyBlock ? float(ctx.outputState.sampleRate) : float(ctx.inputState.sampleRate);
+    const float blockSeconds = sampleRate > 0.0f ? (float(input.size()) / sampleRate) : 0.0f;
+    auto ms_to_coeff = [&](float ms) {
+        if (ms <= 0.0f || blockSeconds <= 0.0f)
+            return 1.0f;
+        const float tau = ms / 1000.0f;
+        const float coeff = 1.0f - std::exp(-blockSeconds / tau);
+        return std::clamp(coeff, 0.0f, 1.0f);
+    };
+    const float attack = ms_to_coeff(settings.attackMs);
+    const float release = ms_to_coeff(settings.releaseMs);
     if (agcPower <= 0.0f)
     {
         agcPower = float(avgPower);

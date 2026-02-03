@@ -19,8 +19,9 @@ struct RadioSettings
     {
         bool enabled = true;
         float targetDb = -14.0f;
-        float attack = 0.2f;
-        float release = 0.02f;
+        // Time constants in milliseconds.
+        float attackMs = 50.0f;
+        float releaseMs = 500.0f;
     };
     AgcSettings inputAgc{};
     AgcSettings outputAgc{};

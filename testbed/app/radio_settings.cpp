@@ -14,18 +14,36 @@ RadioSettings radio_settings_load_settings(const toml::table& settings)
 
     try
     {
-        radioSettings.fftHopDiv = settings["radio_fft_hop_div"].value_or(radioSettings.fftHopDiv);
-        radioSettings.enableFilter = settings["radio_enable_filter"].value_or(radioSettings.enableFilter);
-        radioSettings.markerWidthHz = settings["radio_bandwidth_hz"].value_or(radioSettings.markerWidthHz);
-        radioSettings.inputAgc.targetDb = settings["radio_agc_target"].value_or(radioSettings.inputAgc.targetDb);
-        radioSettings.inputAgc.attack = settings["radio_agc_attack"].value_or(radioSettings.inputAgc.attack);
-        radioSettings.inputAgc.release = settings["radio_agc_release"].value_or(radioSettings.inputAgc.release);
-        radioSettings.inputAgc.enabled = settings["radio_agc_enabled"].value_or(radioSettings.inputAgc.enabled);
-        radioSettings.outputGain = settings["radio_output_gain"].value_or(radioSettings.outputGain);
-        radioSettings.outputAgc.enabled = settings["radio_out_agc_enabled"].value_or(radioSettings.outputAgc.enabled);
-        radioSettings.outputAgc.targetDb = settings["radio_out_agc_target"].value_or(radioSettings.outputAgc.targetDb);
-        radioSettings.outputAgc.attack = settings["radio_out_agc_attack"].value_or(radioSettings.outputAgc.attack);
-        radioSettings.outputAgc.release = settings["radio_out_agc_release"].value_or(radioSettings.outputAgc.release);
+        auto read_bool = [&](const char* key, bool current) {
+            if (auto val = settings[key].value<bool>())
+                return *val;
+            return current;
+        };
+        auto read_float = [&](const char* key, float current) {
+            if (auto val = settings[key].value<float>())
+                return *val;
+            return current;
+        };
+        auto read_u32 = [&](const char* key, uint32_t current) {
+            if (auto val = settings[key].value<uint32_t>())
+                return *val;
+            if (auto val = settings[key].value<int64_t>())
+                return uint32_t(*val);
+            return current;
+        };
+
+        radioSettings.fftHopDiv = read_u32("radio_fft_hop_div", radioSettings.fftHopDiv);
+        radioSettings.enableFilter = read_bool("radio_enable_filter", radioSettings.enableFilter);
+        radioSettings.markerWidthHz = read_float("radio_bandwidth_hz", radioSettings.markerWidthHz);
+        radioSettings.inputAgc.targetDb = read_float("radio_agc_target", radioSettings.inputAgc.targetDb);
+        radioSettings.inputAgc.attackMs = read_float("radio_agc_attack", radioSettings.inputAgc.attackMs);
+        radioSettings.inputAgc.releaseMs = read_float("radio_agc_release", radioSettings.inputAgc.releaseMs);
+        radioSettings.inputAgc.enabled = read_bool("radio_agc_enabled", radioSettings.inputAgc.enabled);
+        radioSettings.outputGain = read_float("radio_output_gain", radioSettings.outputGain);
+        radioSettings.outputAgc.enabled = read_bool("radio_out_agc_enabled", radioSettings.outputAgc.enabled);
+        radioSettings.outputAgc.targetDb = read_float("radio_out_agc_target", radioSettings.outputAgc.targetDb);
+        radioSettings.outputAgc.attackMs = read_float("radio_out_agc_attack", radioSettings.outputAgc.attackMs);
+        radioSettings.outputAgc.releaseMs = read_float("radio_out_agc_release", radioSettings.outputAgc.releaseMs);
     }
     catch (std::exception& ex)
     {
@@ -37,21 +55,19 @@ RadioSettings radio_settings_load_settings(const toml::table& settings)
 
 toml::table radio_settings_save_settings(const RadioSettings& settings)
 {
-    auto tab = toml::table{
-        { "radio_fft_hop_div", int(settings.fftHopDiv) },
-        { "radio_enable_filter", settings.enableFilter },
-        { "radio_bandwidth_hz", settings.markerWidthHz },
-        { "radio_agc_target", settings.inputAgc.targetDb },
-        { "radio_agc_attack", settings.inputAgc.attack },
-        { "radio_agc_release", settings.inputAgc.release },
-        { "radio_agc_enabled", settings.inputAgc.enabled },
-        { "radio_output_gain", settings.outputGain },
-        { "radio_out_agc_enabled", settings.outputAgc.enabled },
-        { "radio_out_agc_target", settings.outputAgc.targetDb },
-        { "radio_out_agc_attack", settings.outputAgc.attack },
-        { "radio_out_agc_release", settings.outputAgc.release },
-    };
-
+    toml::table tab;
+    tab.insert_or_assign("radio_fft_hop_div", int(settings.fftHopDiv));
+    tab.insert_or_assign("radio_enable_filter", settings.enableFilter);
+    tab.insert_or_assign("radio_bandwidth_hz", settings.markerWidthHz);
+    tab.insert_or_assign("radio_agc_target", settings.inputAgc.targetDb);
+    tab.insert_or_assign("radio_agc_attack", settings.inputAgc.attackMs);
+    tab.insert_or_assign("radio_agc_release", settings.inputAgc.releaseMs);
+    tab.insert_or_assign("radio_agc_enabled", settings.inputAgc.enabled);
+    tab.insert_or_assign("radio_output_gain", settings.outputGain);
+    tab.insert_or_assign("radio_out_agc_enabled", settings.outputAgc.enabled);
+    tab.insert_or_assign("radio_out_agc_target", settings.outputAgc.targetDb);
+    tab.insert_or_assign("radio_out_agc_attack", settings.outputAgc.attackMs);
+    tab.insert_or_assign("radio_out_agc_release", settings.outputAgc.releaseMs);
     return tab;
 }
 
@@ -74,8 +90,8 @@ void radio_settings_validate_settings(RadioSettings& settings)
             agc.targetDb = 20.0f * std::log10(linear);
         }
         agc.targetDb = std::clamp(agc.targetDb, -80.0f, 0.0f);
-        agc.attack = std::clamp(agc.attack, 0.01f, 1.0f);
-        agc.release = std::clamp(agc.release, 0.001f, 1.0f);
+        agc.attackMs = std::clamp(agc.attackMs, 1.0f, 5000.0f);
+        agc.releaseMs = std::clamp(agc.releaseMs, 1.0f, 5000.0f);
     };
     validate_agc(settings.inputAgc);
     validate_agc(settings.outputAgc);

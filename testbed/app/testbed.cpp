@@ -552,15 +552,15 @@ void draw()
                     {
                         radioSettings.inputAgc.targetDb = agcTarget;
                     }
-                    float agcAttack = radioSettings.inputAgc.attack;
-                    if (ImGui::SliderFloat("Attack##input_agc_attack", &agcAttack, 0.01f, 1.0f, "%.3f"))
+                    float agcAttack = radioSettings.inputAgc.attackMs;
+                    if (ImGui::SliderFloat("Attack (ms)##input_agc_attack", &agcAttack, 1.0f, 2000.0f, "%.1f"))
                     {
-                        radioSettings.inputAgc.attack = agcAttack;
+                        radioSettings.inputAgc.attackMs = agcAttack;
                     }
-                    float agcRelease = radioSettings.inputAgc.release;
-                    if (ImGui::SliderFloat("Release##input_agc_release", &agcRelease, 0.001f, 1.0f, "%.3f"))
+                    float agcRelease = radioSettings.inputAgc.releaseMs;
+                    if (ImGui::SliderFloat("Release (ms)##input_agc_release", &agcRelease, 1.0f, 5000.0f, "%.1f"))
                     {
-                        radioSettings.inputAgc.release = agcRelease;
+                        radioSettings.inputAgc.releaseMs = agcRelease;
                     }
 
                     const float agcPower = ctx.radioAgcPower.load(std::memory_order_relaxed);
@@ -582,15 +582,15 @@ void draw()
                     {
                         radioSettings.outputAgc.targetDb = outAgcTarget;
                     }
-                    float outAgcAttack = radioSettings.outputAgc.attack;
-                    if (ImGui::SliderFloat("Attack##output_agc_attack", &outAgcAttack, 0.01f, 1.0f, "%.3f"))
+                    float outAgcAttack = radioSettings.outputAgc.attackMs;
+                    if (ImGui::SliderFloat("Attack (ms)##output_agc_attack", &outAgcAttack, 1.0f, 2000.0f, "%.1f"))
                     {
-                        radioSettings.outputAgc.attack = outAgcAttack;
+                        radioSettings.outputAgc.attackMs = outAgcAttack;
                     }
-                    float outAgcRelease = radioSettings.outputAgc.release;
-                    if (ImGui::SliderFloat("Release##output_agc_release", &outAgcRelease, 0.001f, 1.0f, "%.3f"))
+                    float outAgcRelease = radioSettings.outputAgc.releaseMs;
+                    if (ImGui::SliderFloat("Release (ms)##output_agc_release", &outAgcRelease, 1.0f, 5000.0f, "%.1f"))
                     {
-                        radioSettings.outputAgc.release = outAgcRelease;
+                        radioSettings.outputAgc.releaseMs = outAgcRelease;
                     }
                 }
             }
